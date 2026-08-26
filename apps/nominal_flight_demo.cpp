@@ -1,13 +1,19 @@
 #include "passive_flight/ForwardEulerSimulator.hpp"
 #include "passive_flight/ModelContract.hpp"
 #include "passive_flight/ObjectPassport.hpp"
+#include "passive_flight/TrajectoryAnalysis.hpp"
 
 #include <array>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <numbers>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -15,6 +21,13 @@ struct CalculationCase {
     double altitudeM{};
     double speedMps{};
 };
+
+void configureConsoleEncoding() {
+#ifdef _WIN32
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+}
 
 double radiansToDegrees(
     double angleRad
@@ -32,14 +45,9 @@ passive_flight::SimulationRequest makeRequest(
 ) {
     passive_flight::SimulationRequest request;
 
-    request.objectId =
-        object.id;
-
-    request.release.altitudeM =
-        altitudeM;
-
-    request.release.speedMps =
-        speedMps;
+    request.objectId = object.id;
+    request.release.altitudeM = altitudeM;
+    request.release.speedMps = speedMps;
 
     return request;
 }
@@ -50,23 +58,12 @@ makeCalculationOptions(
 ) {
     passive_flight::SimulationOptions options;
 
-    /*
-     * Основной шаг метода Эйлера,
-     * согласованный с постановкой задачи.
-     */
     options.timeStepS = 0.001;
-
     options.maximumTimeS = 300.0;
     options.maximumSteps = 2'000'000;
-
     options.groundAltitudeM = 0.0;
 
     options.saveHistory = saveHistory;
-
-    /*
-     * При шаге 0.001 с сохраняется одна точка
-     * через каждые 100 шагов, то есть через 0.1 с.
-     */
     options.historyStride = 100;
 
     return options;
@@ -178,17 +175,10 @@ bool writeTrajectoryCsv(
 
     for (const auto& sample : result.history) {
         output
-            << sample.state.timeS
-            << ','
-
-            << sample.state.downrangeM
-            << ','
-
-            << sample.state.altitudeM
-            << ','
-
-            << sample.state.speedMps
-            << ','
+            << sample.state.timeS << ','
+            << sample.state.downrangeM << ','
+            << sample.state.altitudeM << ','
+            << sample.state.speedMps << ','
 
             << radiansToDegrees(
                    sample.state.flightPathAngleRad
@@ -205,41 +195,187 @@ bool writeTrajectoryCsv(
                )
             << ','
 
-            << sample.state.pitchRateRadps
+            << sample.state.pitchRateRadps << ','
+
+            << sample.diagnostics
+                   .angleOfAttackRateRadps
             << ','
 
-            << sample.diagnostics.angleOfAttackRateRadps
-            << ','
-
-            << sample.diagnostics.mach
-            << ','
-
-            << sample.diagnostics.reynolds
-            << ','
-
-            << sample.diagnostics.dynamicPressurePa
-            << ','
-
-            << sample.diagnostics.dragCoefficient
-            << ','
-
-            << sample.diagnostics.liftCoefficient
-            << ','
-
-            << sample.diagnostics.pitchingMomentCoefficient
-            << ','
-
-            << sample.diagnostics.dragN
-            << ','
-
-            << sample.diagnostics.liftN
-            << ','
-
+            << sample.diagnostics.mach << ','
+            << sample.diagnostics.reynolds << ','
+            << sample.diagnostics.dynamicPressurePa << ','
+            << sample.diagnostics.dragCoefficient << ','
+            << sample.diagnostics.liftCoefficient << ','
+            << sample.diagnostics.pitchingMomentCoefficient << ','
+            << sample.diagnostics.dragN << ','
+            << sample.diagnostics.liftN << ','
             << sample.diagnostics.pitchingMomentNm
             << '\n';
     }
 
     return output.good();
+}
+
+void printTrajectoryAnalysis(
+    const passive_flight::TrajectoryAnalysis& analysis,
+    const passive_flight::AerodynamicBalanceAnalysis& balance
+) {
+    if (!analysis.available) {
+        std::cout
+            << "Trajectory analysis is unavailable."
+            << '\n';
+
+        return;
+    }
+
+    std::cout
+        << std::fixed
+        << std::setprecision(4)
+        << "\nTrajectory analysis:"
+        << '\n'
+
+        << "  samples: "
+        << analysis.sampleCount
+        << '\n'
+
+        << "  maximum altitude: "
+        << analysis.maximumAltitudeM
+        << " m"
+        << '\n'
+
+        << "  altitude gain: "
+        << analysis.altitudeGainM
+        << " m"
+        << '\n'
+
+        << "  time at maximum altitude: "
+        << analysis.timeAtMaximumAltitudeS
+        << " s"
+        << '\n'
+
+        << "  alpha min/max: "
+        << radiansToDegrees(
+               analysis.minimumAngleOfAttackRad
+           )
+        << " / "
+        << radiansToDegrees(
+               analysis.maximumAngleOfAttackRad
+           )
+        << " deg"
+        << '\n'
+
+        << "  effective wing alpha min/max: "
+        << radiansToDegrees(
+               analysis.minimumEffectiveWingAngleRad
+           )
+        << " / "
+        << radiansToDegrees(
+               analysis.maximumEffectiveWingAngleRad
+           )
+        << " deg"
+        << '\n'
+
+        << "  maximum absolute pitch rate: "
+        << analysis.maximumAbsolutePitchRateRadps
+        << " rad/s"
+        << '\n'
+
+        << "  Mach min/max: "
+        << analysis.minimumMach
+        << " / "
+        << analysis.maximumMach
+        << '\n'
+
+        << "  maximum dynamic pressure: "
+        << analysis.maximumDynamicPressurePa
+        << " Pa"
+        << '\n'
+
+        << "  Cx min/max: "
+        << analysis.minimumCx
+        << " / "
+        << analysis.maximumCx
+        << '\n'
+
+        << "  Cy min/max: "
+        << analysis.minimumCy
+        << " / "
+        << analysis.maximumCy
+        << '\n'
+
+        << "  Mz min/max: "
+        << analysis.minimumMz
+        << " / "
+        << analysis.maximumMz
+        << '\n'
+
+        << "  lift-to-drag min/max/final: "
+        << analysis.minimumLiftToDragRatio
+        << " / "
+        << analysis.maximumLiftToDragRatio
+        << " / "
+        << analysis.finalLiftToDragRatio
+        << '\n'
+
+        << "  alpha settling time: "
+        << analysis.angleOfAttackSettlingTimeS
+        << " s"
+        << '\n';
+
+    if (!balance.available) {
+        std::cout
+            << "  aerodynamic balance: unavailable"
+            << '\n';
+
+        return;
+    }
+
+    std::cout
+        << "\nAerodynamic balance at final Mach:"
+        << '\n'
+
+        << "  Mach: "
+        << balance.mach
+        << '\n'
+
+        << "  mz_alpha: "
+        << balance.mzAlphaPerRad
+        << " 1/rad"
+        << '\n'
+
+        << "  statically stable: "
+        << (
+               balance.staticallyStable
+                   ? "yes"
+                   : "no"
+           )
+        << '\n'
+
+        << "  trim alpha: "
+        << radiansToDegrees(
+               balance.trimAngleOfAttackRad
+           )
+        << " deg"
+        << '\n'
+
+        << "  trim effective wing alpha: "
+        << radiansToDegrees(
+               balance.trimEffectiveWingAngleRad
+           )
+        << " deg"
+        << '\n'
+
+        << "  trim Cx: "
+        << balance.trimCx
+        << '\n'
+
+        << "  trim Cy: "
+        << balance.trimCy
+        << '\n'
+
+        << "  trim lift-to-drag ratio: "
+        << balance.trimLiftToDragRatio
+        << '\n';
 }
 
 void runCalculationTable(
@@ -261,16 +397,13 @@ void runCalculationTable(
     printResultHeader();
 
     for (const auto& calculationCase : cases) {
-        const auto request =
-            makeRequest(
-                object,
-                calculationCase.altitudeM,
-                calculationCase.speedMps
-            );
-
         const auto result =
             simulator.simulate(
-                request,
+                makeRequest(
+                    object,
+                    calculationCase.altitudeM,
+                    calculationCase.speedMps
+                ),
                 options
             );
 
@@ -288,29 +421,21 @@ void createDetailedTrajectory(
     constexpr double altitudeM = 5000.0;
     constexpr double speedMps = 300.0;
 
-    const auto request =
-        makeRequest(
-            object,
-            altitudeM,
-            speedMps
-        );
-
-    const auto options =
-        makeCalculationOptions(true);
-
     const auto result =
         simulator.simulate(
-            request,
-            options
+            makeRequest(
+                object,
+                altitudeM,
+                speedMps
+            ),
+            makeCalculationOptions(true)
         );
 
     constexpr const char* fileName =
         "nominal_trajectory.csv";
 
-    std::cout << '\n';
-
     std::cout
-        << "Detailed trajectory case:"
+        << "\nDetailed trajectory case:"
         << '\n'
         << "  H0 = " << altitudeM << " m"
         << '\n'
@@ -335,15 +460,37 @@ void createDetailedTrajectory(
             << '\n';
     } else {
         std::cout
-            << "Failed to write trajectory file: "
-            << fileName
+            << "Failed to write trajectory file."
             << '\n';
     }
+
+    const auto trajectoryAnalysis =
+        passive_flight::analyzeTrajectory(
+            result,
+            object
+        );
+
+    const auto balance =
+        passive_flight::analyzeAerodynamicBalance(
+            object,
+            result.history.empty()
+                ? 0.8
+                : result.history.back()
+                    .diagnostics
+                    .mach
+        );
+
+    printTrajectoryAnalysis(
+        trajectoryAnalysis,
+        balance
+    );
 }
 
 } // namespace
 
 int main() {
+    configureConsoleEncoding();
+
     const auto passport =
         passive_flight::makeAbstract500UmpkPassport();
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
         PassiveFlightCore
-        VERSION 0.8.0
+        VERSION 0.9.0
         LANGUAGES CXX
 )
 
@@ -20,6 +20,7 @@ add_library(
         src/ObjectAerodynamicsAdapter.cpp
         src/NominalLongitudinalDynamics.cpp
         src/ForwardEulerSimulator.cpp
+        src/TrajectoryAnalysis.cpp
 )
 
 target_include_directories(
@@ -59,115 +60,69 @@ target_link_libraries(
 include(CTest)
 
 if(BUILD_TESTING)
-    add_executable(
+    function(add_core_test target source test_name)
+        add_executable(
+                ${target}
+                ${source}
+        )
+
+        target_link_libraries(
+                ${target}
+                PRIVATE
+                passive_flight_core
+        )
+
+        add_test(
+                NAME ${test_name}
+                COMMAND ${target}
+        )
+    endfunction()
+
+    add_core_test(
             test_model_contract
             tests/test_model_contract.cpp
+            model_contract
     )
 
-    target_link_libraries(
-            test_model_contract
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME model_contract
-            COMMAND test_model_contract
-    )
-
-    add_executable(
+    add_core_test(
             test_object_passport
             tests/test_object_passport.cpp
+            object_passport
     )
 
-    target_link_libraries(
-            test_object_passport
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME object_passport
-            COMMAND test_object_passport
-    )
-
-    add_executable(
+    add_core_test(
             test_atmosphere
             tests/test_atmosphere.cpp
+            atmosphere
     )
 
-    target_link_libraries(
-            test_atmosphere
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME atmosphere
-            COMMAND test_atmosphere
-    )
-
-    add_executable(
+    add_core_test(
             test_aerodynamics
             tests/test_aerodynamics.cpp
+            aerodynamics
     )
 
-    target_link_libraries(
-            test_aerodynamics
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME aerodynamics
-            COMMAND test_aerodynamics
-    )
-
-    add_executable(
+    add_core_test(
             test_object_aerodynamics_adapter
             tests/test_object_aerodynamics_adapter.cpp
+            object_aerodynamics_adapter
     )
 
-    target_link_libraries(
-            test_object_aerodynamics_adapter
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME object_aerodynamics_adapter
-            COMMAND test_object_aerodynamics_adapter
-    )
-
-    add_executable(
+    add_core_test(
             test_nominal_longitudinal_dynamics
             tests/test_nominal_longitudinal_dynamics.cpp
+            nominal_longitudinal_dynamics
     )
 
-    target_link_libraries(
-            test_nominal_longitudinal_dynamics
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME nominal_longitudinal_dynamics
-            COMMAND test_nominal_longitudinal_dynamics
-    )
-
-    add_executable(
+    add_core_test(
             test_forward_euler_simulator
             tests/test_forward_euler_simulator.cpp
+            forward_euler_simulator
     )
 
-    target_link_libraries(
-            test_forward_euler_simulator
-            PRIVATE
-            passive_flight_core
-    )
-
-    add_test(
-            NAME forward_euler_simulator
-            COMMAND test_forward_euler_simulator
+    add_core_test(
+            test_trajectory_analysis
+            tests/test_trajectory_analysis.cpp
+            trajectory_analysis
     )
 endif()
