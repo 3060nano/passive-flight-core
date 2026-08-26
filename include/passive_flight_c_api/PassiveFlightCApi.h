@@ -130,13 +130,8 @@ pfGetObjectCount(void);
  * requiredSize получает необходимый размер буфера
  * с учётом завершающего нулевого символа.
  *
- * Для определения размера можно вызвать:
- *
- * buffer = NULL;
- * bufferSize = 0.
- *
- * В этом случае функция вернёт
- * PF_RESULT_BUFFER_TOO_SMALL.
+ * Для определения размера можно вызвать функцию
+ * с buffer = NULL и bufferSize = 0.
  */
 PF_API int32_t PF_CALL
 pfGetObjectId(
@@ -159,13 +154,6 @@ pfGetObjectDisplayName(
 
 /*
  * Выполняет расчёт без сохранения полной истории.
- *
- * Основные выходы:
- *
- * - downrangeM;
- * - fallTimeS;
- * - impactSpeedMps;
- * - углы встречи.
  */
 PF_API int32_t PF_CALL
 pfCalculate(
@@ -188,8 +176,6 @@ pfCalculate(
  * Второй вызов:
  *
  * передаётся массив необходимого размера.
- *
- * Точки сохраняются с интервалом около 0,1 с.
  */
 PF_API int32_t PF_CALL
 pfCalculateTrajectory(
@@ -199,6 +185,84 @@ pfCalculateTrajectory(
     PFTrajectoryPoint* points,
     uint64_t pointCapacity,
 
+    uint64_t* requiredPointCount,
+    uint64_t* writtenPointCount
+);
+
+/*
+ * Упрощённый скалярный интерфейс для SimInTech.
+ *
+ * Входы блока:
+ *
+ * - objectId;
+ * - releaseAltitudeM;
+ * - releaseSpeedMps.
+ *
+ * Выходы блока:
+ *
+ * - относ;
+ * - время падения;
+ * - скорость встречи;
+ * - угол наклона траектории при встрече;
+ * - угол тангажа при встрече;
+ * - угол атаки при встрече;
+ * - причина завершения.
+ *
+ * Все выходные указатели обязательны.
+ */
+PF_API int32_t PF_CALL
+pfSimInTechCalculate(
+    const char* objectId,
+    double releaseAltitudeM,
+    double releaseSpeedMps,
+
+    double* downrangeM,
+    double* fallTimeS,
+
+    double* impactSpeedMps,
+    double* impactFlightPathAngleRad,
+    double* impactPitchAngleRad,
+    double* impactAngleOfAttackRad,
+
+    int32_t* terminationReason
+);
+
+/*
+ * Упрощённое получение траектории для SimInTech.
+ *
+ * Функция возвращает три массива:
+ *
+ * - timeS — время;
+ * - downrangeM — горизонтальная координата;
+ * - altitudeM — высота.
+ *
+ * Первый вызов:
+ *
+ * timeS = NULL;
+ * downrangeM = NULL;
+ * altitudeM = NULL;
+ * pointCapacity = 0.
+ *
+ * requiredPointCount получит необходимый размер.
+ *
+ * Второй вызов выполняется с тремя массивами
+ * длиной не менее requiredPointCount.
+ *
+ * Функция повторно выполняет моделирование.
+ * На текущем этапе это сделано для сохранения
+ * полностью безсостоянийного интерфейса DLL.
+ */
+PF_API int32_t PF_CALL
+pfSimInTechCalculateTrajectory(
+    const char* objectId,
+    double releaseAltitudeM,
+    double releaseSpeedMps,
+
+    double* timeS,
+    double* downrangeM,
+    double* altitudeM,
+
+    uint64_t pointCapacity,
     uint64_t* requiredPointCount,
     uint64_t* writtenPointCount
 );

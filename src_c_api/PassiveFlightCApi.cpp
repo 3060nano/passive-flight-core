@@ -3,7 +3,6 @@
 #include "passive_flight/ModelContract.hpp"
 #include "passive_flight/ObjectRegistry.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -103,6 +102,25 @@ passive_flight::SimulationRequest makeRequest(
         input.releaseSpeedMps;
 
     return request;
+}
+
+PFSimulationInput makeCInput(
+    const char* objectId,
+    double releaseAltitudeM,
+    double releaseSpeedMps
+) {
+    PFSimulationInput input{};
+
+    input.objectId =
+        objectId;
+
+    input.releaseAltitudeM =
+        releaseAltitudeM;
+
+    input.releaseSpeedMps =
+        releaseSpeedMps;
+
+    return input;
 }
 
 bool isValidInput(
@@ -245,13 +263,85 @@ int32_t validateObjectExistence(
     return PF_RESULT_OK;
 }
 
+bool hasAllSimInTechSummaryOutputs(
+    double* downrangeM,
+    double* fallTimeS,
+    double* impactSpeedMps,
+    double* impactFlightPathAngleRad,
+    double* impactPitchAngleRad,
+    double* impactAngleOfAttackRad,
+    int32_t* terminationReason
+) {
+    return
+        downrangeM != nullptr &&
+        fallTimeS != nullptr &&
+        impactSpeedMps != nullptr &&
+        impactFlightPathAngleRad != nullptr &&
+        impactPitchAngleRad != nullptr &&
+        impactAngleOfAttackRad != nullptr &&
+        terminationReason != nullptr;
+}
+
+void clearSimInTechSummaryOutputs(
+    double& downrangeM,
+    double& fallTimeS,
+    double& impactSpeedMps,
+    double& impactFlightPathAngleRad,
+    double& impactPitchAngleRad,
+    double& impactAngleOfAttackRad,
+    int32_t& terminationReason
+) {
+    downrangeM = 0.0;
+    fallTimeS = 0.0;
+
+    impactSpeedMps = 0.0;
+    impactFlightPathAngleRad = 0.0;
+    impactPitchAngleRad = 0.0;
+    impactAngleOfAttackRad = 0.0;
+
+    terminationReason =
+        PF_TERMINATION_INVALID_INPUT;
+}
+
+void copySimInTechSummaryOutputs(
+    const PFSimulationOutput& source,
+    double& downrangeM,
+    double& fallTimeS,
+    double& impactSpeedMps,
+    double& impactFlightPathAngleRad,
+    double& impactPitchAngleRad,
+    double& impactAngleOfAttackRad,
+    int32_t& terminationReason
+) {
+    downrangeM =
+        source.downrangeM;
+
+    fallTimeS =
+        source.fallTimeS;
+
+    impactSpeedMps =
+        source.impactSpeedMps;
+
+    impactFlightPathAngleRad =
+        source.impactFlightPathAngleRad;
+
+    impactPitchAngleRad =
+        source.impactPitchAngleRad;
+
+    impactAngleOfAttackRad =
+        source.impactAngleOfAttackRad;
+
+    terminationReason =
+        source.terminationReason;
+}
+
 } // namespace
 
 extern "C" {
 
 const char* PF_CALL
 pfGetApiVersion(void) {
-    return "1.0.0";
+    return "1.1.0";
 }
 
 const char* PF_CALL
@@ -493,6 +583,183 @@ pfCalculateTrajectory(
 
         return PF_RESULT_OK;
     } catch (...) {
+        return PF_RESULT_INTERNAL_ERROR;
+    }
+}
+
+int32_t PF_CALL
+pfSimInTechCalculate(
+    const char* objectId,
+    double releaseAltitudeM,
+    double releaseSpeedMps,
+
+    double* downrangeM,
+    double* fallTimeS,
+
+    double* impactSpeedMps,
+    double* impactFlightPathAngleRad,
+    double* impactPitchAngleRad,
+    double* impactAngleOfAttackRad,
+
+    int32_t* terminationReason
+) {
+    if (!hasAllSimInTechSummaryOutputs(
+            downrangeM,
+            fallTimeS,
+            impactSpeedMps,
+            impactFlightPathAngleRad,
+            impactPitchAngleRad,
+            impactAngleOfAttackRad,
+            terminationReason
+        )) {
+        return PF_RESULT_NULL_ARGUMENT;
+    }
+
+    clearSimInTechSummaryOutputs(
+        *downrangeM,
+        *fallTimeS,
+        *impactSpeedMps,
+        *impactFlightPathAngleRad,
+        *impactPitchAngleRad,
+        *impactAngleOfAttackRad,
+        *terminationReason
+    );
+
+    const PFSimulationInput input =
+        makeCInput(
+            objectId,
+            releaseAltitudeM,
+            releaseSpeedMps
+        );
+
+    PFSimulationOutput output{};
+
+    const int32_t result =
+        pfCalculate(
+            &input,
+            &output
+        );
+
+    copySimInTechSummaryOutputs(
+        output,
+        *downrangeM,
+        *fallTimeS,
+        *impactSpeedMps,
+        *impactFlightPathAngleRad,
+        *impactPitchAngleRad,
+        *impactAngleOfAttackRad,
+        *terminationReason
+    );
+
+    return result;
+}
+
+int32_t PF_CALL
+pfSimInTechCalculateTrajectory(
+    const char* objectId,
+    double releaseAltitudeM,
+    double releaseSpeedMps,
+
+    double* timeS,
+    double* downrangeM,
+    double* altitudeM,
+
+    uint64_t pointCapacity,
+    uint64_t* requiredPointCount,
+    uint64_t* writtenPointCount
+) {
+    if (requiredPointCount == nullptr ||
+        writtenPointCount == nullptr) {
+        return PF_RESULT_NULL_ARGUMENT;
+    }
+
+    *requiredPointCount = 0;
+    *writtenPointCount = 0;
+
+    const bool allTrajectoryArraysAreNull =
+        timeS == nullptr &&
+        downrangeM == nullptr &&
+        altitudeM == nullptr;
+
+    const bool allTrajectoryArraysArePresent =
+        timeS != nullptr &&
+        downrangeM != nullptr &&
+        altitudeM != nullptr;
+
+    if (!allTrajectoryArraysAreNull &&
+        !allTrajectoryArraysArePresent) {
+        return PF_RESULT_NULL_ARGUMENT;
+    }
+
+    if (pointCapacity > 0 &&
+        !allTrajectoryArraysArePresent) {
+        return PF_RESULT_NULL_ARGUMENT;
+    }
+
+    const PFSimulationInput input =
+        makeCInput(
+            objectId,
+            releaseAltitudeM,
+            releaseSpeedMps
+        );
+
+    PFSimulationOutput output{};
+
+    if (allTrajectoryArraysAreNull) {
+        return pfCalculateTrajectory(
+            &input,
+            &output,
+            nullptr,
+            0,
+            requiredPointCount,
+            writtenPointCount
+        );
+    }
+
+    try {
+        std::vector<PFTrajectoryPoint> points(
+            static_cast<std::size_t>(
+                pointCapacity
+            )
+        );
+
+        const int32_t result =
+            pfCalculateTrajectory(
+                &input,
+                &output,
+                points.data(),
+                pointCapacity,
+                requiredPointCount,
+                writtenPointCount
+            );
+
+        if (result != PF_RESULT_OK) {
+            return result;
+        }
+
+        for (uint64_t index = 0;
+             index < *writtenPointCount;
+             ++index) {
+            const std::size_t pointIndex =
+                static_cast<std::size_t>(
+                    index
+                );
+
+            timeS[index] =
+                points[pointIndex].timeS;
+
+            downrangeM[index] =
+                points[pointIndex].downrangeM;
+
+            altitudeM[index] =
+                points[pointIndex].altitudeM;
+        }
+
+        return PF_RESULT_OK;
+    } catch (...) {
+        *requiredPointCount = 0;
+        *writtenPointCount = 0;
+
         return PF_RESULT_INTERNAL_ERROR;
     }
 }

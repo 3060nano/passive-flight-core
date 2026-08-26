@@ -25,7 +25,13 @@ void requireNear(
     const std::string& message
 ) {
     if (std::abs(actual - expected) > tolerance) {
-        throw std::runtime_error(message);
+        throw std::runtime_error(
+            message
+            + ": actual="
+            + std::to_string(actual)
+            + ", expected="
+            + std::to_string(expected)
+        );
     }
 }
 
@@ -146,7 +152,7 @@ void testApiVersion() {
 
     require(
         std::string(version) ==
-            "1.0.0",
+            "1.1.0",
         "API version is incorrect"
     );
 }
@@ -397,6 +403,354 @@ void testTrajectoryCalculation() {
     );
 }
 
+void testSimInTechSummaryAdapter() {
+    const PFSimulationInput input =
+        makeInput();
+
+    PFSimulationOutput referenceOutput{};
+
+    const int32_t referenceResult =
+        pfCalculate(
+            &input,
+            &referenceOutput
+        );
+
+    require(
+        referenceResult == PF_RESULT_OK,
+        "Reference calculation failed"
+    );
+
+    double downrangeM = 0.0;
+    double fallTimeS = 0.0;
+
+    double impactSpeedMps = 0.0;
+    double impactFlightPathAngleRad = 0.0;
+    double impactPitchAngleRad = 0.0;
+    double impactAngleOfAttackRad = 0.0;
+
+    int32_t terminationReason =
+        PF_TERMINATION_INVALID_STATE;
+
+    const int32_t adapterResult =
+        pfSimInTechCalculate(
+            input.objectId,
+            input.releaseAltitudeM,
+            input.releaseSpeedMps,
+            &downrangeM,
+            &fallTimeS,
+            &impactSpeedMps,
+            &impactFlightPathAngleRad,
+            &impactPitchAngleRad,
+            &impactAngleOfAttackRad,
+            &terminationReason
+        );
+
+    require(
+        adapterResult == PF_RESULT_OK,
+        "SimInTech summary calculation failed"
+    );
+
+    requireNear(
+        downrangeM,
+        referenceOutput.downrangeM,
+        1.0e-12,
+        "SimInTech downrange differs"
+    );
+
+    requireNear(
+        fallTimeS,
+        referenceOutput.fallTimeS,
+        1.0e-12,
+        "SimInTech fall time differs"
+    );
+
+    requireNear(
+        impactSpeedMps,
+        referenceOutput.impactSpeedMps,
+        1.0e-12,
+        "SimInTech impact speed differs"
+    );
+
+    requireNear(
+        impactFlightPathAngleRad,
+        referenceOutput
+            .impactFlightPathAngleRad,
+        1.0e-12,
+        "SimInTech trajectory angle differs"
+    );
+
+    requireNear(
+        impactPitchAngleRad,
+        referenceOutput.impactPitchAngleRad,
+        1.0e-12,
+        "SimInTech pitch angle differs"
+    );
+
+    requireNear(
+        impactAngleOfAttackRad,
+        referenceOutput.impactAngleOfAttackRad,
+        1.0e-12,
+        "SimInTech angle of attack differs"
+    );
+
+    require(
+        terminationReason ==
+            referenceOutput.terminationReason,
+        "SimInTech termination reason differs"
+    );
+}
+
+void testSimInTechSummaryValidation() {
+    double downrangeM = 0.0;
+    double fallTimeS = 0.0;
+
+    double impactSpeedMps = 0.0;
+    double impactFlightPathAngleRad = 0.0;
+    double impactPitchAngleRad = 0.0;
+    double impactAngleOfAttackRad = 0.0;
+
+    int32_t terminationReason =
+        PF_TERMINATION_INVALID_STATE;
+
+    const int32_t nullOutputResult =
+        pfSimInTechCalculate(
+            "ABSTRACT_500_UMPK_V1",
+            100.0,
+            200.0,
+            nullptr,
+            &fallTimeS,
+            &impactSpeedMps,
+            &impactFlightPathAngleRad,
+            &impactPitchAngleRad,
+            &impactAngleOfAttackRad,
+            &terminationReason
+        );
+
+    require(
+        nullOutputResult ==
+            PF_RESULT_NULL_ARGUMENT,
+        "Null SimInTech output must be rejected"
+    );
+
+    const int32_t unknownObjectResult =
+        pfSimInTechCalculate(
+            "UNKNOWN_OBJECT",
+            100.0,
+            200.0,
+            &downrangeM,
+            &fallTimeS,
+            &impactSpeedMps,
+            &impactFlightPathAngleRad,
+            &impactPitchAngleRad,
+            &impactAngleOfAttackRad,
+            &terminationReason
+        );
+
+    require(
+        unknownObjectResult ==
+            PF_RESULT_OBJECT_NOT_FOUND,
+        "Unknown SimInTech object must be rejected"
+    );
+
+    const int32_t invalidSpeedResult =
+        pfSimInTechCalculate(
+            "ABSTRACT_500_UMPK_V1",
+            100.0,
+            0.0,
+            &downrangeM,
+            &fallTimeS,
+            &impactSpeedMps,
+            &impactFlightPathAngleRad,
+            &impactPitchAngleRad,
+            &impactAngleOfAttackRad,
+            &terminationReason
+        );
+
+    require(
+        invalidSpeedResult ==
+            PF_RESULT_INVALID_INPUT,
+        "Invalid SimInTech speed must be rejected"
+    );
+}
+
+void testSimInTechTrajectoryAdapter() {
+    const PFSimulationInput input =
+        makeInput();
+
+    uint64_t requiredPointCount = 0;
+    uint64_t writtenPointCount = 0;
+
+    const int32_t queryResult =
+        pfSimInTechCalculateTrajectory(
+            input.objectId,
+            input.releaseAltitudeM,
+            input.releaseSpeedMps,
+            nullptr,
+            nullptr,
+            nullptr,
+            0,
+            &requiredPointCount,
+            &writtenPointCount
+        );
+
+    require(
+        queryResult ==
+            PF_RESULT_BUFFER_TOO_SMALL,
+        "SimInTech trajectory size query failed"
+    );
+
+    require(
+        requiredPointCount > 1,
+        "SimInTech trajectory is empty"
+    );
+
+    require(
+        writtenPointCount == 0,
+        "Trajectory query must not write points"
+    );
+
+    std::vector<double> timeS(
+        static_cast<std::size_t>(
+            requiredPointCount
+        )
+    );
+
+    std::vector<double> downrangeM(
+        static_cast<std::size_t>(
+            requiredPointCount
+        )
+    );
+
+    std::vector<double> altitudeM(
+        static_cast<std::size_t>(
+            requiredPointCount
+        )
+    );
+
+    const int32_t calculationResult =
+        pfSimInTechCalculateTrajectory(
+            input.objectId,
+            input.releaseAltitudeM,
+            input.releaseSpeedMps,
+            timeS.data(),
+            downrangeM.data(),
+            altitudeM.data(),
+            requiredPointCount,
+            &requiredPointCount,
+            &writtenPointCount
+        );
+
+    require(
+        calculationResult ==
+            PF_RESULT_OK,
+        "SimInTech trajectory calculation failed"
+    );
+
+    require(
+        writtenPointCount ==
+            requiredPointCount,
+        "Incorrect SimInTech trajectory size"
+    );
+
+    requireNear(
+        timeS.front(),
+        0.0,
+        1.0e-12,
+        "SimInTech trajectory must start at t=0"
+    );
+
+    requireNear(
+        downrangeM.front(),
+        0.0,
+        1.0e-12,
+        "SimInTech trajectory must start at x=0"
+    );
+
+    requireNear(
+        altitudeM.front(),
+        input.releaseAltitudeM,
+        1.0e-12,
+        "Incorrect initial trajectory altitude"
+    );
+
+    require(
+        timeS.back() > 0.0,
+        "Final trajectory time must be positive"
+    );
+
+    require(
+        downrangeM.back() > 0.0,
+        "Final trajectory range must be positive"
+    );
+
+    requireNear(
+        altitudeM.back(),
+        0.0,
+        1.0e-12,
+        "SimInTech trajectory must end at ground"
+    );
+
+    for (std::size_t index = 1;
+         index < timeS.size();
+         ++index) {
+        require(
+            timeS[index] > timeS[index - 1],
+            "Trajectory time must increase"
+        );
+
+        require(
+            downrangeM[index] >
+                downrangeM[index - 1],
+            "Trajectory downrange must increase"
+        );
+    }
+}
+
+void testSimInTechTrajectoryValidation() {
+    uint64_t requiredPointCount = 0;
+    uint64_t writtenPointCount = 0;
+
+    double timeS = 0.0;
+
+    const int32_t partialArraysResult =
+        pfSimInTechCalculateTrajectory(
+            "ABSTRACT_500_UMPK_V1",
+            100.0,
+            200.0,
+            &timeS,
+            nullptr,
+            nullptr,
+            1,
+            &requiredPointCount,
+            &writtenPointCount
+        );
+
+    require(
+        partialArraysResult ==
+            PF_RESULT_NULL_ARGUMENT,
+        "Partial trajectory arrays must be rejected"
+    );
+
+    const int32_t nullCounterResult =
+        pfSimInTechCalculateTrajectory(
+            "ABSTRACT_500_UMPK_V1",
+            100.0,
+            200.0,
+            nullptr,
+            nullptr,
+            nullptr,
+            0,
+            nullptr,
+            &writtenPointCount
+        );
+
+    require(
+        nullCounterResult ==
+            PF_RESULT_NULL_ARGUMENT,
+        "Null trajectory counter must be rejected"
+    );
+}
+
 } // namespace
 
 int main() {
@@ -404,13 +758,19 @@ int main() {
         testApiVersion();
         testResultCodeNames();
         testObjectList();
+
         testSummaryCalculation();
         testUnknownObject();
         testInvalidInput();
         testTrajectoryCalculation();
 
+        testSimInTechSummaryAdapter();
+        testSimInTechSummaryValidation();
+        testSimInTechTrajectoryAdapter();
+        testSimInTechTrajectoryValidation();
+
         std::cout
-            << "All C API tests passed."
+            << "All C API and SimInTech adapter tests passed."
             << '\n';
 
         return EXIT_SUCCESS;
