@@ -1,0 +1,8 @@
+LIBRARY passive_flight_trajectory_simintech
+
+EXPORTS
+    INFO_FUNC   @1
+    INIT_FUNC   @2
+    RUN_FUNC    @3
+    STATE_FUNC  @4
+    CONTUR_FUNC @5

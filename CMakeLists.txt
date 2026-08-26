@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
         PassiveFlightCore
-        VERSION 0.13.0
+        VERSION 0.14.0
         LANGUAGES C CXX
 )
 
@@ -13,11 +13,6 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-
-# ============================================================
-# Основное вычислительное ядро
-# ============================================================
 
 add_library(
         passive_flight_core
@@ -61,11 +56,6 @@ else()
             -Wpedantic
     )
 endif()
-
-
-# ============================================================
-# Универсальный C API
-# ============================================================
 
 add_library(
         passive_flight_c_api
@@ -123,11 +113,6 @@ if(MINGW)
     )
 endif()
 
-
-# ============================================================
-# Демонстрационное приложение
-# ============================================================
-
 add_executable(
         passive_flight_demo
         apps/nominal_flight_demo.cpp
@@ -138,11 +123,6 @@ target_link_libraries(
         PRIVATE
         passive_flight_core
 )
-
-
-# ============================================================
-# Динамический smoke-тест C API DLL
-# ============================================================
 
 add_executable(
         passive_flight_dll_smoke_test
@@ -168,13 +148,6 @@ if(UNIX AND NOT APPLE)
     )
 endif()
 
-
-# ============================================================
-# Нативная оболочка для блока «Внешняя DLL» SimInTech
-#
-# Официальный шаблон SimInTech использует MinGW
-# и упаковку структур -fpack-struct=1.
-# ============================================================
 
 if(WIN32 AND MINGW)
     add_library(
@@ -225,12 +198,56 @@ if(WIN32 AND MINGW)
             PREFIX ""
             OUTPUT_NAME "passive_flight_simintech"
     )
+
+    add_library(
+            passive_flight_trajectory_simintech
+            SHARED
+            src_simintech/SimInTechTrajectoryBlock.c
+            src_simintech/PassiveFlightTrajectorySimInTech.def
+    )
+
+    target_compile_definitions(
+            passive_flight_trajectory_simintech
+            PRIVATE
+            PF_SIT_BLOCK_EXPORTS
+    )
+
+    target_include_directories(
+            passive_flight_trajectory_simintech
+            PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/simintech
+    )
+
+    target_link_libraries(
+            passive_flight_trajectory_simintech
+            PRIVATE
+            passive_flight_c_api
+    )
+
+    target_compile_options(
+            passive_flight_trajectory_simintech
+            PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -fpack-struct=1
+    )
+
+    target_link_options(
+            passive_flight_trajectory_simintech
+            PRIVATE
+            -Wl,--add-stdcall-alias
+            -static-libgcc
+    )
+
+    set_target_properties(
+            passive_flight_trajectory_simintech
+            PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "passive_flight_trajectory_simintech"
+    )
 endif()
-
-
-# ============================================================
-# Тестирование
-# ============================================================
 
 include(CTest)
 
@@ -252,11 +269,6 @@ if(BUILD_TESTING)
                 COMMAND ${target}
         )
     endfunction()
-
-
-    # --------------------------------------------------------
-    # Тесты вычислительного ядра
-    # --------------------------------------------------------
 
     add_core_test(
             test_model_contract
@@ -312,11 +324,6 @@ if(BUILD_TESTING)
             object_registry
     )
 
-
-    # --------------------------------------------------------
-    # Тест универсального C API
-    # --------------------------------------------------------
-
     add_executable(
             test_c_api
             tests/test_c_api.cpp
@@ -333,22 +340,12 @@ if(BUILD_TESTING)
             COMMAND test_c_api
     )
 
-
-    # --------------------------------------------------------
-    # Проверка реальной динамической загрузки C API DLL
-    # --------------------------------------------------------
-
     add_test(
             NAME dll_smoke
             COMMAND
             passive_flight_dll_smoke_test
             $<TARGET_FILE:passive_flight_c_api>
     )
-
-
-    # --------------------------------------------------------
-    # Тест нативного интерфейса SimInTech
-    # --------------------------------------------------------
 
     if(WIN32 AND MINGW)
         add_executable(
@@ -382,6 +379,39 @@ if(BUILD_TESTING)
         add_test(
                 NAME simintech_block
                 COMMAND test_simintech_block
+        )
+
+        add_executable(
+                test_simintech_trajectory_block
+                tests/test_simintech_trajectory_block.c
+        )
+
+        target_include_directories(
+                test_simintech_trajectory_block
+                PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/third_party/simintech
+        )
+
+        target_compile_options(
+                test_simintech_trajectory_block
+                PRIVATE
+                -Wall
+                -Wextra
+                -Wpedantic
+                -fpack-struct=1
+        )
+
+        target_link_libraries(
+                test_simintech_trajectory_block
+                PRIVATE
+                passive_flight_trajectory_simintech
+                passive_flight_c_api
+        )
+
+        add_test(
+                NAME simintech_trajectory_block
+                COMMAND test_simintech_trajectory_block
         )
     endif()
 
