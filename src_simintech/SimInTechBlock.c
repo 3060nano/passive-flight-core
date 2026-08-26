@@ -7,7 +7,7 @@
 #include <string.h>
 
 /*
- * ПОРЯДОК ВНЕШНИХ ПЕРЕМЕННЫХ
+ * ПОРЯДОК ВНЕШНИХ ПЕРЕМЕННЫХ SIMINTECH
  *
  * Входы:
  *
@@ -25,8 +25,11 @@
  * 8  — impactAngleOfAttackRad;
  * 9  — terminationReason;
  * 10 — resultCode.
+ *
+ * Имена input:N и out:N являются частью соглашения
+ * загрузчика DLL SimInTech и связывают записи таблицы
+ * с графическими портами блока.
  */
-
 enum {
     PF_SIT_RELEASE_ALTITUDE_INDEX = 0,
     PF_SIT_RELEASE_SPEED_INDEX = 1,
@@ -41,20 +44,10 @@ enum {
     PF_SIT_TERMINATION_REASON_INDEX = 9,
     PF_SIT_RESULT_CODE_INDEX = 10,
 
+    PF_SIT_OUTPUT_COUNT = 8,
+    PF_SIT_INPUT_COUNT = 3,
     PF_SIT_EXTERNAL_VARIABLE_COUNT = 11
 };
-
-/*
- * Значения входов по умолчанию.
- */
-static double defaultReleaseAltitudeM =
-    1000.0;
-
-static double defaultReleaseSpeedMps =
-    200.0;
-
-static double defaultObjectIndex =
-    0.0;
 
 /*
  * Значения выходов по умолчанию.
@@ -84,15 +77,29 @@ static double defaultResultCode =
     (double) PF_RESULT_INVALID_INPUT;
 
 /*
- * Описание входов и выходов для SimInTech.
+ * Значения входов по умолчанию.
+ */
+static double defaultReleaseAltitudeM =
+    1000.0;
+
+static double defaultReleaseSpeedMps =
+    200.0;
+
+static double defaultObjectIndex =
+    0.0;
+
+/*
+ * Таблица внешних переменных.
  *
- * Поле index соответствует индексу в extVarsAddress.
+ * ВАЖНО:
+ *
+ * Имена записей должны иметь вид input:N и out:N.
  */
 static ext_var_info_record externalVariables[
     PF_SIT_EXTERNAL_VARIABLE_COUNT
 ] = {
     {
-        "releaseAltitudeM",
+        "input:0",
         "Release altitude, m",
         &defaultReleaseAltitudeM,
         vt_double,
@@ -103,7 +110,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "releaseSpeedMps",
+        "input:1",
         "Release speed, m/s",
         &defaultReleaseSpeedMps,
         vt_double,
@@ -114,7 +121,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "objectIndex",
+        "input:2",
         "Object registry index",
         &defaultObjectIndex,
         vt_double,
@@ -125,7 +132,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "downrangeM",
+        "out:0",
         "Calculated downrange, m",
         &defaultDownrangeM,
         vt_double,
@@ -136,7 +143,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "fallTimeS",
+        "out:1",
         "Fall time, s",
         &defaultFallTimeS,
         vt_double,
@@ -147,7 +154,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "impactSpeedMps",
+        "out:2",
         "Impact speed, m/s",
         &defaultImpactSpeedMps,
         vt_double,
@@ -158,7 +165,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "impactFlightPathAngleRad",
+        "out:3",
         "Impact flight path angle, rad",
         &defaultImpactPathAngleRad,
         vt_double,
@@ -169,7 +176,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "impactPitchAngleRad",
+        "out:4",
         "Impact pitch angle, rad",
         &defaultImpactPitchAngleRad,
         vt_double,
@@ -180,7 +187,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "impactAngleOfAttackRad",
+        "out:5",
         "Impact angle of attack, rad",
         &defaultImpactAttackAngleRad,
         vt_double,
@@ -191,7 +198,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "terminationReason",
+        "out:6",
         "Simulation termination reason",
         &defaultTerminationReason,
         vt_double,
@@ -202,7 +209,7 @@ static ext_var_info_record externalVariables[
         0
     },
     {
-        "resultCode",
+        "out:7",
         "Passive Flight DLL result code",
         &defaultResultCode,
         vt_double,
@@ -215,15 +222,10 @@ static ext_var_info_record externalVariables[
 };
 
 /*
- * Локальное состояние одного экземпляра блока.
+ * Локальные данные одного экземпляра блока.
  *
- * SimInTech выделяет отдельную область locals
- * для каждого рассчитываемого компонента.
- *
- * Кэш необходим, поскольку RUN_FUNC может вызываться
- * несколько раз на одном шаге интегрирования.
- * Полный расчёт траектории повторяется только тогда,
- * когда изменились входные параметры.
+ * Кэш предотвращает повторный расчёт полной траектории
+ * на каждом шаге SimInTech.
  */
 typedef struct PFSimInTechLocalState {
     int initialized;
@@ -244,22 +246,10 @@ typedef struct PFSimInTechLocalState {
     int32_t resultCode;
 } PFSimInTechLocalState;
 
-/*
- * Настройки SimInTech.
- *
- * Наш блок сам выполняет полный расчёт методом Эйлера.
- * Внешний решатель SimInTech для него не используется.
- */
 static TTaskInfoStruct taskInfo;
 
-/*
- * Уникальный идентификатор структуры схемы.
- *
- * Значение относится только к версии интерфейса блока,
- * а не к математической модели объекта.
- */
 static const unsigned int schemeHash32 =
-    0x50465331U;
+    0x50465334U;
 
 static double* externalDouble(
     void** extVarsAddress,
@@ -377,13 +367,15 @@ static void writeLocalResultToPorts(
     writeExternalDouble(
         extVarsAddress,
         PF_SIT_TERMINATION_REASON_INDEX,
-        (double) localState->terminationReason
+        (double)
+            localState->terminationReason
     );
 
     writeExternalDouble(
         extVarsAddress,
         PF_SIT_RESULT_CODE_INDEX,
-        (double) localState->resultCode
+        (double)
+            localState->resultCode
     );
 }
 
@@ -460,27 +452,54 @@ static void calculateIfNecessary(
 
     int objectResult;
 
-    if (localState == NULL) {
+    double* releaseAltitudeAddress;
+    double* releaseSpeedAddress;
+    double* objectIndexAddress;
+
+    if (localState == NULL ||
+        extVarsAddress == NULL) {
         return;
     }
 
-    releaseAltitudeM =
-        *externalDouble(
+    releaseAltitudeAddress =
+        externalDouble(
             extVarsAddress,
             PF_SIT_RELEASE_ALTITUDE_INDEX
         );
 
-    releaseSpeedMps =
-        *externalDouble(
+    releaseSpeedAddress =
+        externalDouble(
             extVarsAddress,
             PF_SIT_RELEASE_SPEED_INDEX
         );
 
-    objectIndex =
-        *externalDouble(
+    objectIndexAddress =
+        externalDouble(
             extVarsAddress,
             PF_SIT_OBJECT_INDEX
         );
+
+    if (releaseAltitudeAddress == NULL ||
+        releaseSpeedAddress == NULL ||
+        objectIndexAddress == NULL) {
+        clearLocalResult(
+            localState
+        );
+
+        localState->resultCode =
+            PF_RESULT_NULL_ARGUMENT;
+
+        return;
+    }
+
+    releaseAltitudeM =
+        *releaseAltitudeAddress;
+
+    releaseSpeedMps =
+        *releaseSpeedAddress;
+
+    objectIndex =
+        *objectIndexAddress;
 
     if (!inputsHaveChanged(
             localState,
@@ -588,8 +607,7 @@ INFO_FUNC(
         stateVarsInfo == NULL ||
         constInfo == NULL ||
 
-        schemeHash == NULL ||
-        algorithmObjectId == NULL) {
+        schemeHash == NULL) {
         return r_Fail;
     }
 
@@ -623,10 +641,16 @@ INFO_FUNC(
     *schemeHash =
         schemeHash32;
 
-    *algorithmObjectId =
-        NULL;
+    if (algorithmObjectId != NULL) {
+        *algorithmObjectId =
+            NULL;
+    }
 
-    taskInfo.TASK_API_VER_NUM = 0;
+    memset(
+        &taskInfo,
+        0,
+        sizeof(taskInfo)
+    );
 
     taskInfo.AbsErr = 1.0e-6;
     taskInfo.RelErr = 1.0e-4;
@@ -839,3 +863,4 @@ CONTUR_FUNC(
 
     return r_Success;
 }
+
