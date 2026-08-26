@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
         PassiveFlightCore
-        VERSION 0.9.0
+        VERSION 0.10.0
         LANGUAGES CXX
 )
 
@@ -21,6 +21,7 @@ add_library(
         src/NominalLongitudinalDynamics.cpp
         src/ForwardEulerSimulator.cpp
         src/TrajectoryAnalysis.cpp
+        src/ObjectRegistry.cpp
 )
 
 target_include_directories(
@@ -124,5 +125,11 @@ if(BUILD_TESTING)
             test_trajectory_analysis
             tests/test_trajectory_analysis.cpp
             trajectory_analysis
+    )
+
+    add_core_test(
+            test_object_registry
+            tests/test_object_registry.cpp
+            object_registry
     )
 endif()
