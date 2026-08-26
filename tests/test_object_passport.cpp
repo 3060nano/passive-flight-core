@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -150,11 +151,11 @@ void testWingGeometry() {
 
     /*
      * Предварительный положительный угол
-     * установки крыла равен четырём градусам.
+     * установки крыла равен трём градусам.
      */
     requireNear(
         passport.object.wing.installationAngleRad,
-        4.0 * kDegreesToRadians,
+        3.0 * kDegreesToRadians,
         1.0e-12,
         "Wing installation angle"
     );
@@ -275,7 +276,7 @@ void testParameterProvenance() {
 
     requireNear(
         numericValue(*wingInstallationAngle),
-        4.0 * kDegreesToRadians,
+        3.0 * kDegreesToRadians,
         1.0e-12,
         "Recorded wing installation angle"
     );

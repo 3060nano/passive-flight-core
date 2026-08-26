@@ -223,10 +223,10 @@ ObjectPassport makeAbstract500UmpkPassport() {
      * Предварительный положительный угол установки крыла.
      *
      * При начальном угле атаки объекта alpha = 0
-     * эффективный угол атаки крыла будет равен 4 градусам.
+     * эффективный угол атаки крыла будет равен 3 градусам.
      */
     object.wing.installationAngleRad =
-        4.0 * degreesToRadians;
+        3.0 * degreesToRadians;
 
     object.wing.efficiencyFactor =
         0.80;
@@ -437,7 +437,7 @@ ObjectPassport makeAbstract500UmpkPassport() {
         "rad",
         ParameterStatus::Provisional,
         "trim-assumption",
-        "Предварительный угол установки крыла принят равным +4 градусам"
+        "Предварительный угол установки крыла принят равным +3 градусам"
     );
 
     addNumber(
