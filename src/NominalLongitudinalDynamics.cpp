@@ -140,9 +140,6 @@ NominalLongitudinalDynamics::evaluate(
     const double pitchRateRadS =
         state.pitchRateRadps;
 
-    const double pitchAngleRad =
-        state.pitchAngleRad;
-
     const double altitudeM =
         state.altitudeM;
 
