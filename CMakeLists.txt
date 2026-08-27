@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
         PassiveFlightCore
-        VERSION 0.15.0
+        VERSION 0.16.0
         LANGUAGES C CXX
 )
 
@@ -25,6 +25,7 @@ add_library(
         src/NominalLongitudinalDynamics.cpp
         src/PerturbedLongitudinalDynamics.cpp
         src/ForwardEulerSimulator.cpp
+        src/PerturbedTrajectorySimulator.cpp
         src/TrajectoryAnalysis.cpp
         src/ObjectRegistry.cpp
 )
@@ -317,6 +318,12 @@ if(BUILD_TESTING)
             test_forward_euler_simulator
             tests/test_forward_euler_simulator.cpp
             forward_euler_simulator
+    )
+
+    add_core_test(
+            test_perturbed_trajectory_simulator
+            tests/test_perturbed_trajectory_simulator.cpp
+            perturbed_trajectory_simulator
     )
 
     add_core_test(
