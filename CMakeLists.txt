@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
         PassiveFlightCore
-        VERSION 0.16.0
+        VERSION 0.17.0
         LANGUAGES C CXX
 )
 
@@ -26,6 +26,7 @@ add_library(
         src/PerturbedLongitudinalDynamics.cpp
         src/ForwardEulerSimulator.cpp
         src/PerturbedTrajectorySimulator.cpp
+        src/PerturbedTrajectoryCsv.cpp
         src/TrajectoryAnalysis.cpp
         src/ObjectRegistry.cpp
 )
@@ -122,6 +123,17 @@ add_executable(
 
 target_link_libraries(
         passive_flight_demo
+        PRIVATE
+        passive_flight_core
+)
+
+add_executable(
+        passive_flight_perturbed_demo
+        apps/perturbed_flight_demo.cpp
+)
+
+target_link_libraries(
+        passive_flight_perturbed_demo
         PRIVATE
         passive_flight_core
 )
@@ -324,6 +336,12 @@ if(BUILD_TESTING)
             test_perturbed_trajectory_simulator
             tests/test_perturbed_trajectory_simulator.cpp
             perturbed_trajectory_simulator
+    )
+
+    add_core_test(
+            test_perturbed_trajectory_csv
+            tests/test_perturbed_trajectory_csv.cpp
+            perturbed_trajectory_csv
     )
 
     add_core_test(
