@@ -27,6 +27,7 @@ add_library(
         src/ForwardEulerSimulator.cpp
         src/PerturbedTrajectorySimulator.cpp
         src/PerturbedTrajectoryCsv.cpp
+        src/PerturbedImpactAnalysis.cpp
         src/TrajectoryAnalysis.cpp
         src/ObjectRegistry.cpp
 )
@@ -342,6 +343,12 @@ if(BUILD_TESTING)
             test_perturbed_trajectory_csv
             tests/test_perturbed_trajectory_csv.cpp
             perturbed_trajectory_csv
+    )
+
+    add_core_test(
+            test_perturbed_impact_analysis
+            tests/test_perturbed_impact_analysis.cpp
+            perturbed_impact_analysis
     )
 
     add_core_test(

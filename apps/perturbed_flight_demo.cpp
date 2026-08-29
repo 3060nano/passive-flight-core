@@ -1,8 +1,8 @@
 #include "passive_flight/ObjectPassport.hpp"
+#include "passive_flight/PerturbedImpactAnalysis.hpp"
 #include "passive_flight/PerturbedTrajectoryCsv.hpp"
 #include "passive_flight/PerturbedTrajectorySimulator.hpp"
 
-#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -57,7 +57,9 @@ int main(
     passive_flight::LongitudinalPerturbationState
         initialPerturbation;
 
-    initialPerturbation.speedMps = 1.0;
+    initialPerturbation.speedMps =
+        1.0;
+
     initialPerturbation.pitchAngleRad =
         0.1 * kDegreesToRadians;
 
@@ -67,21 +69,19 @@ int main(
     options.maximumTimeS = 30.0;
     options.maximumSteps = 100'000;
     options.saveHistory = true;
-
-    /*
-     * В CSV сохраняется каждая десятая точка:
-     * интервал вывода равен 0,01 с.
-     */
     options.historyStride = 10;
 
-    const auto result = simulator.simulate(
-        request,
-        initialPerturbation,
-        options
-    );
+    const auto result =
+        simulator.simulate(
+            request,
+            initialPerturbation,
+            options
+        );
 
     if (result.terminationReason !=
-        passive_flight::TerminationReason::GroundReached) {
+        passive_flight::
+            TerminationReason::GroundReached) {
+
         std::cerr
             << "Perturbed simulation failed: "
             << passive_flight::terminationReasonName(
@@ -117,59 +117,200 @@ int main(
         return EXIT_FAILURE;
     }
 
+    /*
+     * Правая часть невозмущённой системы
+     * непосредственно в точке номинального падения.
+     *
+     * Она нужна для чувствительности параметров
+     * события падения к сдвигу времени.
+     */
+    const auto finalNominalEvaluation =
+        simulator
+            .perturbationDynamics()
+            .nominalDynamics()
+            .evaluate(
+                result.finalNominalState
+            );
+
+    const auto impactAnalysis =
+        passive_flight::analyzePerturbedImpact(
+            result,
+            finalNominalEvaluation.derivative
+        );
+
     std::cout << std::setprecision(10);
 
     std::cout
         << "Perturbed longitudinal flight demo\n"
-        << "Object: " << passport.object.id << '\n'
+        << "Object: "
+        << passport.object.id
+        << '\n'
+
         << "Release altitude: "
-        << request.release.altitudeM << " m\n"
+        << request.release.altitudeM
+        << " m\n"
+
         << "Release speed: "
-        << request.release.speedMps << " m/s\n"
+        << request.release.speedMps
+        << " m/s\n"
+
         << "Initial Delta V: "
-        << initialPerturbation.speedMps << " m/s\n"
+        << initialPerturbation.speedMps
+        << " m/s\n"
+
         << "Initial Delta theta: "
         << initialPerturbation.pitchAngleRad *
             kRadiansToDegrees
         << " deg\n"
+
         << "Initial Delta alpha: "
         << deltaAngleOfAttackRad(
             initialPerturbation
-        ) * kRadiansToDegrees
+        ) *
+            kRadiansToDegrees
         << " deg\n\n";
 
     std::cout
-        << "Nominal impact time: "
-        << result.finalNominalState.timeS << " s\n"
-        << "Nominal impact downrange: "
-        << result.finalNominalState.downrangeM << " m\n"
-        << "Nominal impact speed: "
-        << result.finalNominalState.speedMps << " m/s\n\n";
+        << "Nominal impact:\n"
 
+        << "Time: "
+        << result.finalNominalState.timeS
+        << " s\n"
+
+        << "Downrange: "
+        << result.finalNominalState.downrangeM
+        << " m\n"
+
+        << "Speed: "
+        << result.finalNominalState.speedMps
+        << " m/s\n\n";
+
+    /*
+     * Эти Delta относятся к одному и тому же
+     * моменту времени t_f*.
+     */
     std::cout
-        << "Final Delta V: "
-        << result.finalPerturbation.speedMps << " m/s\n"
-        << "Final Delta Theta: "
-        << result.finalPerturbation.flightPathAngleRad *
+        << "Perturbation at nominal impact time:\n"
+
+        << "Delta V: "
+        << result.finalPerturbation.speedMps
+        << " m/s\n"
+
+        << "Delta Theta: "
+        << result.finalPerturbation
+               .flightPathAngleRad *
             kRadiansToDegrees
         << " deg\n"
-        << "Final Delta theta: "
-        << result.finalPerturbation.pitchAngleRad *
+
+        << "Delta omega_z: "
+        << result.finalPerturbation
+               .pitchRateRadps *
+            kRadiansToDegrees
+        << " deg/s\n"
+
+        << "Delta theta: "
+        << result.finalPerturbation
+               .pitchAngleRad *
             kRadiansToDegrees
         << " deg\n"
-        << "Final Delta alpha: "
+
+        << "Delta alpha: "
         << deltaAngleOfAttackRad(
             result.finalPerturbation
-        ) * kRadiansToDegrees
+        ) *
+            kRadiansToDegrees
         << " deg\n"
-        << "Final Delta x: "
-        << result.finalPerturbation.downrangeM << " m\n"
-        << "Final Delta H: "
-        << result.finalPerturbation.altitudeM << " m\n\n";
+
+        << "Delta x: "
+        << result.finalPerturbation.downrangeM
+        << " m\n"
+
+        << "Delta H: "
+        << result.finalPerturbation.altitudeM
+        << " m\n\n";
+
+    if (!impactAnalysis.available) {
+        std::cerr
+            << "Perturbed impact analysis "
+               "is unavailable\n";
+
+        return EXIT_FAILURE;
+    }
+
+    const auto& changes =
+        impactAnalysis.changes;
+
+    const auto& perturbedImpact =
+        impactAnalysis.estimatedImpactState;
+
+    /*
+     * Здесь уже выводятся не Delta(t_f*),
+     * а изменения параметров самого события H = 0.
+     */
+    std::cout
+        << "Perturbed impact event, "
+           "first-order estimate:\n"
+
+        << "Nominal vertical speed at impact: "
+        << impactAnalysis.nominalVerticalSpeedMps
+        << " m/s\n"
+
+        << "Delta impact time: "
+        << changes.fallTimeS
+        << " s\n"
+
+        << "Perturbed impact time: "
+        << perturbedImpact.timeS
+        << " s\n"
+
+        << "Delta impact range: "
+        << changes.downrangeM
+        << " m\n"
+
+        << "Perturbed impact range: "
+        << perturbedImpact.downrangeM
+        << " m\n"
+
+        << "Delta impact speed: "
+        << changes.speedMps
+        << " m/s\n"
+
+        << "Perturbed impact speed: "
+        << perturbedImpact.speedMps
+        << " m/s\n"
+
+        << "Delta impact Theta: "
+        << changes.flightPathAngleRad *
+            kRadiansToDegrees
+        << " deg\n"
+
+        << "Delta impact omega_z: "
+        << changes.pitchRateRadps *
+            kRadiansToDegrees
+        << " deg/s\n"
+
+        << "Delta impact theta: "
+        << changes.pitchAngleRad *
+            kRadiansToDegrees
+        << " deg\n"
+
+        << "Delta impact alpha: "
+        << changes.angleOfAttackRad() *
+            kRadiansToDegrees
+        << " deg\n"
+
+        << "Impact altitude: "
+        << perturbedImpact.altitudeM
+        << " m\n\n";
 
     std::cout
-        << "CSV points: " << result.history.size() << '\n'
-        << "CSV file: " << outputPath << '\n';
+        << "CSV points: "
+        << result.history.size()
+        << '\n'
+
+        << "CSV file: "
+        << outputPath
+        << '\n';
 
     return EXIT_SUCCESS;
 }
