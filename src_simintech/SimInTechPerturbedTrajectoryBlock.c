@@ -33,7 +33,7 @@
  * total:
  * x, H, V, Theta, omega_z, theta, alpha;
  *
- * nominal fall time;
+ * perturbed fall time;
  * finished;
  * resultCode.
  */
@@ -444,7 +444,7 @@ static ext_var_info_record externalVariables[
     },
     {
         "out:22",
-        "Nominal fall time, s",
+        "Perturbed fall time, s",
         &defaultZero,
         vt_double,
         {1, 0, 0},

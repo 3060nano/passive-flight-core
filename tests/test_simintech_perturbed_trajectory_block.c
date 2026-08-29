@@ -226,7 +226,7 @@ int main(void) {
      * 10..16 nominal
      * 17..23 Delta
      * 24..30 total
-     * 31 fall time
+     * 31 perturbed fall time
      * 32 finished
      * 33 result code
      */
@@ -298,7 +298,7 @@ int main(void) {
 
     require(
         finalTimeS > 0.0,
-        "Fall time must be positive"
+        "Perturbed fall time must be positive"
     );
 
     /*
@@ -367,8 +367,10 @@ int main(void) {
     );
 
     /*
-     * После конца траектории блок должен
-     * удерживать последнюю точку и выставить finished=1.
+     * После собственного момента падения
+     * возмущённого объекта блок должен
+     * удерживать терминальную точку H = 0
+     * и выставить finished=1.
      */
     result =
         RUN_FUNC(
@@ -400,10 +402,17 @@ int main(void) {
     );
 
     requireNear(
-        values[11],
+        values[25],
         0.0,
         1.0e-8,
-        "Final nominal altitude must be ground"
+        "Final perturbed altitude must be ground"
+    );
+
+    requireNear(
+        values[25],
+        values[11] + values[18],
+        1.0e-9,
+        "Final total altitude is inconsistent"
     );
 
     requireNear(

@@ -70,10 +70,10 @@ PFPerturbedSimulationInput makeInput() {
     return input;
 }
 
-void testTrajectory() {
-    const auto input =
-        makeInput();
-
+std::vector<PFPerturbedTrajectoryPoint>
+calculateTrajectory(
+    const PFPerturbedSimulationInput& input
+) {
     uint64_t required = 0;
     uint64_t written = 0;
 
@@ -127,6 +127,24 @@ void testTrajectory() {
         written == required,
         "Written trajectory size is incorrect"
     );
+
+    points.resize(
+        static_cast<std::size_t>(
+            written
+        )
+    );
+
+    return points;
+}
+
+void testTrajectory() {
+    const auto input =
+        makeInput();
+
+    const auto points =
+        calculateTrajectory(
+            input
+        );
 
     const auto& first =
         points.front();
@@ -205,10 +223,26 @@ void testTrajectory() {
     );
 
     requireNear(
-        last.nominalAltitudeM,
+        last.totalAltitudeM,
         0.0,
         1.0e-9,
-        "Final nominal altitude must be ground"
+        "Final perturbed altitude must be ground"
+    );
+
+    requireNear(
+        last.totalDownrangeM,
+        last.nominalDownrangeM +
+            last.deltaDownrangeM,
+        1.0e-10,
+        "Final total downrange is inconsistent"
+    );
+
+    requireNear(
+        last.totalAltitudeM,
+        last.nominalAltitudeM +
+            last.deltaAltitudeM,
+        1.0e-10,
+        "Final total altitude is inconsistent"
     );
 
     requireNear(
@@ -242,6 +276,17 @@ void testTrajectory() {
         1.0e-10,
         "Final total alpha is inconsistent"
     );
+
+    require(
+        points.size() >= 2,
+        "Trajectory must have a point before impact"
+    );
+
+    require(
+        points[points.size() - 2].timeS <
+            last.timeS,
+        "Terminal impact point must preserve increasing time"
+    );
 }
 
 void testZeroPerturbation() {
@@ -251,44 +296,10 @@ void testZeroPerturbation() {
     input.deltaSpeedMps = 0.0;
     input.deltaPitchAngleRad = 0.0;
 
-    uint64_t required = 0;
-    uint64_t written = 0;
-
-    int32_t result =
-        pfCalculatePerturbedTrajectory(
-            &input,
-            nullptr,
-            0,
-            &required,
-            &written
+    const auto points =
+        calculateTrajectory(
+            input
         );
-
-    require(
-        result ==
-            PF_RESULT_BUFFER_TOO_SMALL,
-        "Zero-perturbation size query failed"
-    );
-
-    std::vector<PFPerturbedTrajectoryPoint>
-        points(
-            static_cast<std::size_t>(
-                required
-            )
-        );
-
-    result =
-        pfCalculatePerturbedTrajectory(
-            &input,
-            points.data(),
-            required,
-            &required,
-            &written
-        );
-
-    require(
-        result == PF_RESULT_OK,
-        "Zero-perturbation trajectory failed"
-    );
 
     for (const auto& point : points) {
         requireNear(
@@ -312,6 +323,20 @@ void testZeroPerturbation() {
             "Zero perturbation produced Delta alpha"
         );
     }
+
+    requireNear(
+        points.back().nominalAltitudeM,
+        0.0,
+        1.0e-9,
+        "Zero-perturbation nominal altitude must end at ground"
+    );
+
+    requireNear(
+        points.back().totalAltitudeM,
+        0.0,
+        1.0e-9,
+        "Zero-perturbation total altitude must end at ground"
+    );
 }
 
 } // namespace
