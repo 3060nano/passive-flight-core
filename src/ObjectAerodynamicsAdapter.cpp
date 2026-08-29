@@ -9,17 +9,10 @@ namespace {
  * Поправочный коэффициент нормальной силы корпуса,
  * учитывающий форму носовой части.
  *
- * Значения являются предварительными:
+ * Значения пока предварительные:
  *
  * оживальная форма: 1.00;
  * коническая форма: 1.05.
- *
- * После оцифровки графиков учебника эта функция
- * будет заменена табличной зависимостью от:
- *
- * - числа Маха;
- * - удлинения носовой части;
- * - формы носовой части.
  */
 double noseNormalForceFactor(
     NoseShape noseShape
@@ -42,28 +35,20 @@ double noseNormalForceFactor(
  * нормальной силы корпуса.
  *
  * Координата отсчитывается от носа объекта.
- *
- * Для оживальной формы предварительно принимается:
- *
- * x_f_body = L_body / 3.
- *
- * Для конической формы центр давления смещается
- * немного вперёд:
- *
- * x_f_body = 0.30 * L_body.
- *
- * Позднее зависимость будет уточнена по графикам
- * Лебедева и Чернобровкина.
  */
 double bodyAerodynamicCenterXM(
     const BodyGeometry& body
 ) {
     switch (body.noseShape) {
         case NoseShape::Ogival:
-            return body.lengthM / 3.0;
+            return
+                body.lengthM /
+                3.0;
 
         case NoseShape::Conical:
-            return 0.30 * body.lengthM;
+            return
+                0.30 *
+                body.lengthM;
     }
 
     throw std::invalid_argument(
@@ -71,7 +56,8 @@ double bodyAerodynamicCenterXM(
     );
 }
 
-LiftingSurfaceAerodynamics makeWingAerodynamics(
+LiftingSurfaceAerodynamics
+makeWingAerodynamics(
     const WingGeometry& wing
 ) {
     LiftingSurfaceAerodynamics result;
@@ -82,16 +68,20 @@ LiftingSurfaceAerodynamics makeWingAerodynamics(
     result.aspectRatio =
         wing.aspectRatio();
 
-    /*
-     * В ObjectModel поле называется sweepHalfChordRad,
-     * а в AerodynamicGeometry — halfChordSweepRad.
-     */
     result.halfChordSweepRad =
         wing.sweepHalfChordRad;
 
     result.efficiencyFactor =
         wing.efficiencyFactor;
 
+    /*
+     * Угол установки крыла напрямую
+     * передаётся из ObjectModel.
+     *
+     * Для текущего базового объекта:
+     *
+     *     iWing = +3 градуса.
+     */
     result.installationAngleRad =
         wing.installationAngleRad;
 
@@ -101,7 +91,8 @@ LiftingSurfaceAerodynamics makeWingAerodynamics(
     return result;
 }
 
-LiftingSurfaceAerodynamics makeTailAerodynamics(
+LiftingSurfaceAerodynamics
+makeTailAerodynamics(
     const TailGeometry& tail
 ) {
     LiftingSurfaceAerodynamics result;
@@ -112,10 +103,6 @@ LiftingSurfaceAerodynamics makeTailAerodynamics(
     result.aspectRatio =
         tail.aspectRatio();
 
-    /*
-     * В ObjectModel поле называется sweepHalfChordRad,
-     * а в AerodynamicGeometry — halfChordSweepRad.
-     */
     result.halfChordSweepRad =
         tail.sweepHalfChordRad;
 
@@ -133,7 +120,8 @@ LiftingSurfaceAerodynamics makeTailAerodynamics(
 
 } // namespace
 
-AerodynamicGeometry makeAerodynamicGeometry(
+AerodynamicGeometry
+makeAerodynamicGeometry(
     const ObjectModel& object
 ) {
     AerodynamicGeometry result;
@@ -145,7 +133,8 @@ AerodynamicGeometry makeAerodynamicGeometry(
         object.reference.areaM2;
 
     result.referenceChordM =
-        object.reference.meanAerodynamicChordM;
+        object.reference
+            .meanAerodynamicChordM;
 
     /*
      * Параметры корпуса.
@@ -167,8 +156,8 @@ AerodynamicGeometry makeAerodynamicGeometry(
         );
 
     /*
-     * Параметры крыла и стабилизатора берутся
-     * непосредственно из паспорта объекта.
+     * Параметры крыла и стабилизатора
+     * берутся непосредственно из паспорта.
      */
     result.wing =
         makeWingAerodynamics(
@@ -181,26 +170,25 @@ AerodynamicGeometry makeAerodynamicGeometry(
         );
 
     /*
-     * На данном этапе производная скоса потока
-     * принимается постоянной.
+     * Производная скоса потока
+     * пока принимается постоянной.
      */
-    result.downwashGradient = 0.25;
-
-    /*
-     * Первая приближённая оценка производной
-     * момента по скорости изменения угла атаки.
-     */
-    result.alphaDotDampingRatio = 0.35;
+    result.downwashGradient =
+        0.25;
 
     return result;
 }
 
-PreliminaryAerodynamicModel makeAerodynamicModel(
+PreliminaryAerodynamicModel
+makeAerodynamicModel(
     const ObjectModel& object
 ) {
     return PreliminaryAerodynamicModel(
-        makeAerodynamicGeometry(object),
-        makeAbstract500ZeroLiftDragTable()
+        makeAerodynamicGeometry(
+            object
+        ),
+        makeAbstract500ZeroLiftDragTable(),
+        makeAbstract500PitchMomentAlphaDotDerivativeTable()
     );
 }
 

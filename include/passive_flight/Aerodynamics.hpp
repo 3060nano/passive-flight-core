@@ -14,6 +14,35 @@ struct DragCoefficientPoint {
 };
 
 /**
+ * Одна точка табличной зависимости производной
+ * коэффициента продольного момента по безразмерной
+ * скорости изменения угла атаки.
+ *
+ * Используемое соглашение:
+ *
+ *     alphaDotBar =
+ *         alphaDot * referenceChord / (2 * V)
+ *
+ * и
+ *
+ *     mzAlphaDot =
+ *         mzAlphaDotDerivative * alphaDotBar.
+ *
+ * Поэтому mzAlphaDotDerivative является
+ * безразмерной производной:
+ *
+ *     d(mz) / d(alphaDotBar).
+ *
+ * Если исходная таблица в будущем будет использовать
+ * другую нормировку alphaDot, данные необходимо
+ * предварительно привести к этому соглашению.
+ */
+struct PitchMomentAlphaDotDerivativePoint {
+    double mach{0.0};
+    double mzAlphaDotDerivative{0.0};
+};
+
+/**
  * Геометрические параметры отдельной несущей поверхности:
  * крыла или стабилизатора.
  */
@@ -40,9 +69,6 @@ struct LiftingSurfaceAerodynamics {
 /**
  * Геометрические и настроечные параметры,
  * необходимые непосредственно аэродинамической модели.
- *
- * На следующем этапе будет добавлен преобразователь
- * ObjectModel -> AerodynamicGeometry.
  */
 struct AerodynamicGeometry {
     // Характерная площадь объекта, м^2.
@@ -80,13 +106,6 @@ struct AerodynamicGeometry {
      * d epsilon / d alpha.
      */
     double downwashGradient{0.0};
-
-    /*
-     * Приближённое отношение производной
-     * m_z по скорости изменения угла атаки
-     * к производной демпфирующего момента.
-     */
-    double alphaDotDampingRatio{0.0};
 };
 
 /**
@@ -96,7 +115,7 @@ struct AerodynamicInput {
     // Число Маха.
     double mach{0.0};
 
-    // Угол атаки, рад.
+    // Угол атаки объекта, рад.
     double angleOfAttackRad{0.0};
 
     // Угловая скорость тангажа omega_z, рад/с.
@@ -156,7 +175,8 @@ struct AerodynamicCoefficients {
      * Производная коэффициента момента по безразмерной
      * угловой скорости:
      *
-     * omega_z_bar = omega_z * b_a / (2 * V).
+     * omegaZBar =
+     *     omega_z * referenceChord / (2 * V).
      */
     double mzPitchRateDerivative{0.0};
 
@@ -164,7 +184,13 @@ struct AerodynamicCoefficients {
      * Производная коэффициента момента по безразмерной
      * скорости изменения угла атаки:
      *
-     * alpha_dot_bar = alpha_dot * b_a / (2 * V).
+     * alphaDotBar =
+     *     alphaDot * referenceChord / (2 * V).
+     *
+     * В текущей модели определяется из таблицы
+     * mzAlphaDotDerivative(M).
+     *
+     * При отсутствии таблицы равна нулю.
      */
     double mzAlphaDotDerivative{0.0};
 };
@@ -177,12 +203,31 @@ struct AerodynamicCoefficients {
 AerodynamicGeometry makeAbstract500AerodynamicGeometry();
 
 /**
- * Возвращает таблицу коэффициента сопротивления,
- * извлечённую из переданной модели SimInTech.
+ * Возвращает таблицу коэффициента сопротивления
+ * базового объекта.
  */
 [[nodiscard]]
 std::vector<DragCoefficientPoint>
 makeAbstract500ZeroLiftDragTable();
+
+/**
+ * Возвращает таблицу
+ *
+ *     mzAlphaDotDerivative(M).
+ *
+ * На текущем этапе надёжные исходные данные
+ * отсутствуют, поэтому таблица пустая.
+ *
+ * Пустая таблица означает:
+ *
+ *     mzAlphaDotDerivative = 0.
+ *
+ * Когда зависимость будет оцифрована,
+ * достаточно заполнить эту функцию табличными точками.
+ */
+[[nodiscard]]
+std::vector<PitchMomentAlphaDotDerivativePoint>
+makeAbstract500PitchMomentAlphaDotDerivativeTable();
 
 /**
  * Расчётная аэродинамическая модель первого приближения.
@@ -191,9 +236,29 @@ class PreliminaryAerodynamicModel {
 public:
     PreliminaryAerodynamicModel();
 
+    /**
+     * Конструктор без таблицы mzAlphaDotDerivative(M).
+     *
+     * В этом случае вклад alphaDot отключён.
+     */
     PreliminaryAerodynamicModel(
         const AerodynamicGeometry& geometry,
         std::vector<DragCoefficientPoint> zeroLiftDragTable
+    );
+
+    /**
+     * Полный конструктор аэродинамической модели.
+     *
+     * alphaDotDerivativeTable может быть пустой.
+     * Пустая таблица означает:
+     *
+     *     mzAlphaDotDerivative = 0.
+     */
+    PreliminaryAerodynamicModel(
+        const AerodynamicGeometry& geometry,
+        std::vector<DragCoefficientPoint> zeroLiftDragTable,
+        std::vector<PitchMomentAlphaDotDerivativePoint>
+            alphaDotDerivativeTable
     );
 
     /**
@@ -217,9 +282,21 @@ public:
     const std::vector<DragCoefficientPoint>&
     zeroLiftDragTable() const noexcept;
 
+    /**
+     * Возвращает таблицу mzAlphaDotDerivative(M).
+     */
+    [[nodiscard]]
+    const std::vector<PitchMomentAlphaDotDerivativePoint>&
+    alphaDotDerivativeTable() const noexcept;
+
 private:
     AerodynamicGeometry geometry_;
-    std::vector<DragCoefficientPoint> zeroLiftDragTable_;
+
+    std::vector<DragCoefficientPoint>
+        zeroLiftDragTable_;
+
+    std::vector<PitchMomentAlphaDotDerivativePoint>
+        alphaDotDerivativeTable_;
 };
 
 } // namespace passive_flight
