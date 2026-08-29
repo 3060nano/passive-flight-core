@@ -66,6 +66,7 @@ add_library(
         SHARED
         src_c_api/PassiveFlightCApi.cpp
         src_c_api/PerturbedFlightCApi.cpp
+        src_c_api/PerturbedTrajectoryCApi.cpp
 )
 
 target_compile_definitions(
@@ -263,7 +264,7 @@ if (WIN32 AND MINGW)
             PREFIX ""
             OUTPUT_NAME "passive_flight_trajectory_simintech"
     )
-    
+
     add_library(
             passive_flight_perturbed_simintech
             SHARED
@@ -311,6 +312,55 @@ if (WIN32 AND MINGW)
             PROPERTIES
             PREFIX ""
             OUTPUT_NAME "passive_flight_perturbed_simintech"
+    )
+
+    add_library(
+            passive_flight_perturbed_trajectory_simintech
+            SHARED
+            src_simintech/SimInTechPerturbedTrajectoryBlock.c
+            src_simintech/PassiveFlightPerturbedTrajectorySimInTech.def
+    )
+
+    target_compile_definitions(
+            passive_flight_perturbed_trajectory_simintech
+            PRIVATE
+            PF_SIT_BLOCK_EXPORTS
+    )
+
+    target_include_directories(
+            passive_flight_perturbed_trajectory_simintech
+            PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/simintech
+    )
+
+    target_link_libraries(
+            passive_flight_perturbed_trajectory_simintech
+            PRIVATE
+            passive_flight_c_api
+    )
+
+    target_compile_options(
+            passive_flight_perturbed_trajectory_simintech
+            PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -fpack-struct=1
+    )
+
+    target_link_options(
+            passive_flight_perturbed_trajectory_simintech
+            PRIVATE
+            -Wl,--add-stdcall-alias
+            -static-libgcc
+    )
+
+    set_target_properties(
+            passive_flight_perturbed_trajectory_simintech
+            PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "passive_flight_perturbed_trajectory_simintech"
     )
 endif ()
 
@@ -457,6 +507,22 @@ if (BUILD_TESTING)
             COMMAND test_perturbed_c_api
     )
 
+    add_executable(
+            test_perturbed_trajectory_c_api
+            tests/test_perturbed_trajectory_c_api.cpp
+    )
+
+    target_link_libraries(
+            test_perturbed_trajectory_c_api
+            PRIVATE
+            passive_flight_c_api
+    )
+
+    add_test(
+            NAME perturbed_trajectory_c_api
+            COMMAND test_perturbed_trajectory_c_api
+    )
+
     add_test(
             NAME dll_smoke
             COMMAND
@@ -562,6 +628,39 @@ if (BUILD_TESTING)
         add_test(
                 NAME simintech_perturbed_block
                 COMMAND test_simintech_perturbed_block
+        )
+
+        add_executable(
+                test_simintech_perturbed_trajectory_block
+                tests/test_simintech_perturbed_trajectory_block.c
+        )
+
+        target_include_directories(
+                test_simintech_perturbed_trajectory_block
+                PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/third_party/simintech
+        )
+
+        target_compile_options(
+                test_simintech_perturbed_trajectory_block
+                PRIVATE
+                -Wall
+                -Wextra
+                -Wpedantic
+                -fpack-struct=1
+        )
+
+        target_link_libraries(
+                test_simintech_perturbed_trajectory_block
+                PRIVATE
+                passive_flight_perturbed_trajectory_simintech
+                passive_flight_c_api
+        )
+
+        add_test(
+                NAME simintech_perturbed_trajectory_block
+                COMMAND test_simintech_perturbed_trajectory_block
         )
     endif ()
 
