@@ -382,9 +382,37 @@ void testPitchDamping() {
         );
 
     check(
-        result.mzPitchRateDerivative <
+        result.mzPitchRateBodyDerivative <
             0.0,
-        "Pitch-rate derivative is damping"
+        "Body pitch-rate derivative is damping"
+    );
+
+    checkNear(
+        result.mzPitchRateWingDerivative,
+        0.0,
+        1.0e-12,
+        "Wing pitch-rate derivative is explicitly not modelled yet"
+    );
+
+    check(
+        result.mzPitchRateTailDerivative <
+            0.0,
+        "Tail pitch-rate derivative is damping"
+    );
+
+    checkNear(
+        result.mzPitchRateDerivative,
+        result.mzPitchRateBodyDerivative +
+            result.mzPitchRateWingDerivative +
+            result.mzPitchRateTailDerivative,
+        1.0e-12,
+        "Total pitch-rate derivative is sum of body, wing and tail contributions"
+    );
+
+    check(
+        result.mzPitchRateDerivative <
+            result.mzPitchRateTailDerivative,
+        "Body contribution makes total damping stronger than tail-only damping"
     );
 
     check(

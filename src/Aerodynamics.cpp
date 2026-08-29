@@ -554,6 +554,46 @@ double forceContributionToMoment(
         dimensionlessArm;
 }
 
+/**
+ * Производная демпфирующего момента для части объекта,
+ * представленной сосредоточенной нормальной силой.
+ *
+ * Используемая нормировка:
+ *
+ *     omegaZBar = omega_z * referenceChord / (2 * V).
+ *
+ * Для производной нормальной силы c_y^alpha и плеча l:
+ *
+ *     mz^omega =
+ *         -2 * c_y^alpha * (l / referenceChord)^2.
+ *
+ * Квадрат плеча обеспечивает отрицательный
+ * демпфирующий вклад независимо от того, находится
+ * характерная точка впереди или позади центра масс.
+ *
+ * Эта модель применяется здесь к корпусу и стабилизатору.
+ * Для крыла она недостаточна из-за распределённой нагрузки
+ * по хорде, поэтому вклад крыла рассчитывается отдельно.
+ */
+double concentratedNormalForcePitchRateDerivative(
+    double normalForceSlopePerRad,
+    double aerodynamicCenterXM,
+    const AerodynamicGeometry& geometry
+) {
+    const double dimensionlessArm =
+        (
+            aerodynamicCenterXM -
+            geometry.centerOfMassXM
+        ) /
+        geometry.referenceChordM;
+
+    return
+        -2.0 *
+        normalForceSlopePerRad *
+        dimensionlessArm *
+        dimensionlessArm;
+}
+
 } // namespace
 
 AerodynamicGeometry
@@ -907,28 +947,71 @@ PreliminaryAerodynamicModel::evaluate(
         );
 
     /*
-     * Плечо стабилизатора относительно
-     * центра масс.
+     * Полная производная демпфирующего момента
+     * теперь разложена по физическим источникам.
+     *
+     * 1. Корпус.
+     *
+     * В первом приближении нормальная сила корпуса
+     * считается сосредоточенной в его аэродинамическом
+     * центре. Это даёт:
+     *
+     *     mzBody^omega =
+     *         -2 * cyBody^alpha * (lBody / bRef)^2.
      */
-    const double tailArmM =
-        geometry_.tail.aerodynamicCenterXM -
-        geometry_.centerOfMassXM;
-
-    const double dimensionlessTailArm =
-        tailArmM /
-        geometry_.referenceChordM;
+    result.mzPitchRateBodyDerivative =
+        concentratedNormalForcePitchRateDerivative(
+            bodySlopePerRad,
+            geometry_.bodyAerodynamicCenterXM,
+            geometry_
+        );
 
     /*
-     * Производная демпфирующего момента
-     * по безразмерной угловой скорости.
+     * 2. Крыло.
+     *
+     * Для крыла нельзя корректно использовать только
+     * плечо его аэродинамического центра: даже при оси
+     * вращения в районе фокуса распределение местных
+     * углов атаки по хорде создаёт демпфирующий момент.
+     *
+     * До реализации отдельной методики для крыла
+     * этот вклад явно оставляется нулевым.
+     * Это означает "не смоделировано", а не
+     * физическое отсутствие демпфирования крыла.
      */
-    result.mzPitchRateDerivative =
-        -2.0 *
+    result.mzPitchRateWingDerivative =
+        0.0;
+
+    /*
+     * 3. Стабилизатор.
+     *
+     * Для удалённого стабилизатора применяется
+     * прежнее приближение сосредоточенной нормальной
+     * силы на длинном плече:
+     *
+     *     mzTail^omega =
+     *         -2 * cyTailRigid^alpha * (lTail / bRef)^2.
+     *
+     * Здесь cyTailRigid^alpha включает отношение площадей
+     * и efficiencyFactor, но пока не содержит дополнительный
+     * вращательный вклад от изменения скоса потока.
+     */
+    const double tailRigidSlopePerRad =
         tailLocalSlopePerRad *
         geometry_.tail.efficiencyFactor *
-        tailAreaRatio *
-        dimensionlessTailArm *
-        dimensionlessTailArm;
+        tailAreaRatio;
+
+    result.mzPitchRateTailDerivative =
+        concentratedNormalForcePitchRateDerivative(
+            tailRigidSlopePerRad,
+            geometry_.tail.aerodynamicCenterXM,
+            geometry_
+        );
+
+    result.mzPitchRateDerivative =
+        result.mzPitchRateBodyDerivative +
+        result.mzPitchRateWingDerivative +
+        result.mzPitchRateTailDerivative;
 
     /*
      * Производная момента по alphaDot
