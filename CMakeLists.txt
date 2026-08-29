@@ -352,6 +352,12 @@ if(BUILD_TESTING)
     )
 
     add_core_test(
+            test_perturbed_linearization_validation
+            tests/test_perturbed_linearization_validation.cpp
+            perturbed_linearization_validation
+    )
+
+    add_core_test(
             test_trajectory_analysis
             tests/test_trajectory_analysis.cpp
             trajectory_analysis
