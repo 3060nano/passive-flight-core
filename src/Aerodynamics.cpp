@@ -151,15 +151,6 @@ void validateGeometry(
         "Downwash gradient"
     );
 
-    if (
-        geometry.downwashGradient >=
-        1.0
-    ) {
-        throw std::invalid_argument(
-            "Downwash gradient must be below one"
-        );
-    }
-
     validateSurface(
         geometry.wing,
         "Wing"
@@ -202,6 +193,52 @@ void validateDragTable(
         ) {
             throw std::invalid_argument(
                 "Drag-table Mach numbers must be strictly increasing"
+            );
+        }
+    }
+}
+
+void validateDownwashGradientTable(
+    const std::vector<DownwashGradientPoint>& table
+) {
+    /*
+     * Пустая таблица допустима: в этом случае
+     * используется geometry.downwashGradient.
+     */
+    if (table.empty()) {
+        return;
+    }
+
+    if (table.size() < 2) {
+        throw std::invalid_argument(
+            "Downwash-gradient table must be empty "
+            "or contain at least two points"
+        );
+    }
+
+    for (
+        std::size_t index = 0;
+        index < table.size();
+        ++index
+    ) {
+        requireNonNegative(
+            table[index].mach,
+            "Downwash-gradient Mach number"
+        );
+
+        requireNonNegative(
+            table[index].gradient,
+            "Downwash gradient"
+        );
+
+        if (
+            index > 0 &&
+            table[index].mach <=
+                table[index - 1].mach
+        ) {
+            throw std::invalid_argument(
+                "Downwash-gradient Mach numbers "
+                "must be strictly increasing"
             );
         }
     }
@@ -350,6 +387,57 @@ double interpolateDragCoefficient(
             upper->zeroLiftDragCoefficient -
             lower->zeroLiftDragCoefficient
         );
+}
+
+/**
+ * Интерполяция зависимости
+ *
+ *     epsilonAlpha(M) = d epsilon / d alpha.
+ *
+ * Если таблица пустая, возвращается резервное значение
+ * из AerodynamicGeometry. За пределами непустой таблицы
+ * используется ближайшее граничное значение.
+ */
+double interpolateDownwashGradient(
+    double mach,
+    const std::vector<DownwashGradientPoint>& table,
+    double fallbackGradient
+) {
+    if (table.empty()) {
+        return fallbackGradient;
+    }
+
+    if (mach <= table.front().mach) {
+        return table.front().gradient;
+    }
+
+    if (mach >= table.back().mach) {
+        return table.back().gradient;
+    }
+
+    const auto upper =
+        std::upper_bound(
+            table.begin(),
+            table.end(),
+            mach,
+            [](
+                double value,
+                const DownwashGradientPoint& point
+            ) {
+                return value < point.mach;
+            }
+        );
+
+    const auto lower = upper - 1;
+
+    const double interpolationParameter =
+        (mach - lower->mach) /
+        (upper->mach - lower->mach);
+
+    return
+        lower->gradient +
+        interpolationParameter *
+        (upper->gradient - lower->gradient);
 }
 
 /**
@@ -673,11 +761,12 @@ makeAbstract500AerodynamicGeometry() {
         2.050;
 
     /*
-     * Производная скоса потока пока
-     * остаётся предварительной.
+     * Резервное дозвуковое значение производной
+     * среднего угла скоса потока. Основной путь для
+     * базового объекта использует таблицу epsilonAlpha(M).
      */
     geometry.downwashGradient =
-        0.25;
+        0.57;
 
     return geometry;
 }
@@ -711,6 +800,36 @@ makeAbstract500ZeroLiftDragTable() {
     };
 }
 
+std::vector<DownwashGradientPoint>
+makeAbstract500DownwashGradientTable() {
+    /*
+     * Дозвуковая оценка epsilonAlpha(M) по формуле (3.34)
+     * Лебедева--Чернобровкина для текущей геометрии.
+     *
+     * Основные использованные параметры:
+     *
+     *     kAlphaI / KAlphaII ~= 0.535;
+     *     i ~= 0.85 (графическая оценка по рис. 3.17);
+     *     zBarB ~= 0.79...0.80 (рис. 3.16);
+     *     psiEpsilon = 1 для M <= 1.
+     *
+     * Точность ограничена графическим считыванием старых
+     * номограмм, поэтому лишние десятичные знаки не хранятся.
+     *
+     * Для M > 1 текущий интерполятор зажимает последнее
+     * значение 0.569. Это предварительный fallback до тех пор,
+     * пока не станет возможен расчёт psiEpsilon(M) по полной
+     * взаимной продольной геометрии крыла и стабилизатора.
+     */
+    return {
+        {0.20, 0.576},
+        {0.40, 0.576},
+        {0.60, 0.576},
+        {0.80, 0.569},
+        {1.00, 0.569}
+    };
+}
+
 std::vector<PitchMomentAlphaDotDerivativePoint>
 makeAbstract500PitchMomentAlphaDotDerivativeTable() {
     /*
@@ -738,6 +857,7 @@ PreliminaryAerodynamicModel()
     : PreliminaryAerodynamicModel(
           makeAbstract500AerodynamicGeometry(),
           makeAbstract500ZeroLiftDragTable(),
+          makeAbstract500DownwashGradientTable(),
           makeAbstract500PitchMomentAlphaDotDerivativeTable()
       ) {
 }
@@ -750,9 +870,8 @@ PreliminaryAerodynamicModel(
 )
     : PreliminaryAerodynamicModel(
           geometry,
-          std::move(
-              zeroLiftDragTable
-          ),
+          std::move(zeroLiftDragTable),
+          {},
           {}
       ) {
 }
@@ -766,25 +885,40 @@ PreliminaryAerodynamicModel(
         PitchMomentAlphaDotDerivativePoint
     > alphaDotDerivativeTable
 )
+    : PreliminaryAerodynamicModel(
+          geometry,
+          std::move(zeroLiftDragTable),
+          {},
+          std::move(alphaDotDerivativeTable)
+      ) {
+}
+
+PreliminaryAerodynamicModel::
+PreliminaryAerodynamicModel(
+    const AerodynamicGeometry& geometry,
+    std::vector<DragCoefficientPoint>
+        zeroLiftDragTable,
+    std::vector<DownwashGradientPoint>
+        downwashGradientTable,
+    std::vector<
+        PitchMomentAlphaDotDerivativePoint
+    > alphaDotDerivativeTable
+)
     : geometry_(geometry),
       zeroLiftDragTable_(
-          std::move(
-              zeroLiftDragTable
-          )
+          std::move(zeroLiftDragTable)
+      ),
+      downwashGradientTable_(
+          std::move(downwashGradientTable)
       ),
       alphaDotDerivativeTable_(
-          std::move(
-              alphaDotDerivativeTable
-          )
+          std::move(alphaDotDerivativeTable)
       ) {
-    validateGeometry(
-        geometry_
+    validateGeometry(geometry_);
+    validateDragTable(zeroLiftDragTable_);
+    validateDownwashGradientTable(
+        downwashGradientTable_
     );
-
-    validateDragTable(
-        zeroLiftDragTable_
-    );
-
     validateAlphaDotDerivativeTable(
         alphaDotDerivativeTable_
     );
@@ -845,6 +979,13 @@ PreliminaryAerodynamicModel::evaluate(
         input.angleOfAttackRad +
         geometry_.wing.installationAngleRad;
 
+    result.downwashGradient =
+        interpolateDownwashGradient(
+            input.mach,
+            downwashGradientTable_,
+            geometry_.downwashGradient
+        );
+
     /*
      * Угол атаки стабилизатора:
      *
@@ -855,7 +996,7 @@ PreliminaryAerodynamicModel::evaluate(
     const double tailEffectiveAngleRad =
         (
             1.0 -
-            geometry_.downwashGradient
+            result.downwashGradient
         ) *
         input.angleOfAttackRad +
         geometry_.tail.installationAngleRad;
@@ -1081,7 +1222,7 @@ PreliminaryAerodynamicModel::evaluate(
         tailLocalSlopePerRad *
         (
             1.0 -
-            geometry_.downwashGradient
+            result.downwashGradient
         );
 
     /*
@@ -1111,7 +1252,7 @@ PreliminaryAerodynamicModel::evaluate(
                 tailLocalSlopePerRad *
                 (
                     1.0 -
-                    geometry_.downwashGradient
+                    result.downwashGradient
                 ),
             geometry_.tail.aerodynamicCenterXM,
             geometry_
@@ -1131,6 +1272,13 @@ PreliminaryAerodynamicModel::
 zeroLiftDragTable()
     const noexcept {
     return zeroLiftDragTable_;
+}
+
+const std::vector<DownwashGradientPoint>&
+PreliminaryAerodynamicModel::
+downwashGradientTable()
+    const noexcept {
+    return downwashGradientTable_;
 }
 
 const std::vector<

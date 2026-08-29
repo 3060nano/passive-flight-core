@@ -112,7 +112,7 @@ void testDefaultRegistry() {
     );
 
     require(
-        object->mass.centerOfMassXM == 1.17,
+        object->mass.centerOfMassXM == 1.15,
         "Default object center of mass is incorrect"
     );
 }

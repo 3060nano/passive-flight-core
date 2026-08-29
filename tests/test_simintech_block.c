@@ -88,6 +88,7 @@ int main(void) {
     ];
 
     int index;
+    double baselineFallTimeS;
 
     memset(
         &solverData,
@@ -247,23 +248,29 @@ int main(void) {
         "RUN_FUNC failed"
     );
 
+    /*
+     * Контрольная точка актуальной базовой модели:
+     *
+     * x_CM = 1.15 м;
+     * дозвуковая таблица d epsilon / d alpha ~= 0.57.
+     */
     requireNear(
         values[3],
-        1370.709,
+        1156.434,
         1.0,
         "Incorrect downrange"
     );
 
     requireNear(
         values[4],
-        7.374,
+        6.14978,
         0.01,
         "Incorrect fall time"
     );
 
     requireNear(
         values[5],
-        176.351,
+        180.761,
         0.1,
         "Incorrect impact speed"
     );
@@ -278,9 +285,15 @@ int main(void) {
         "Impact pitch angle must be negative"
     );
 
-    require(
-        values[8] > 0.0,
-        "Impact angle of attack must be positive"
+    /*
+     * При текущей балансировке конечный угол атаки
+     * очень мал и слегка отрицателен.
+     */
+    requireNear(
+        values[8],
+        -0.000900112,
+        1.0e-4,
+        "Incorrect impact angle of attack"
     );
 
     requireNear(
@@ -297,6 +310,14 @@ int main(void) {
         0.0,
         "Incorrect result code"
     );
+
+    /*
+     * Сохраняем время падения базового расчёта.
+     * Оно понадобится для проверки того, что после
+     * изменения начальной высоты кэш действительно
+     * сбросился и была рассчитана новая траектория.
+     */
+    baselineFallTimeS = values[4];
 
     /*
      * Проверяем изменение входа.
@@ -332,8 +353,8 @@ int main(void) {
     );
 
     require(
-        values[4] > 20.0,
-        "Changed altitude did not update fall time"
+        values[4] > baselineFallTimeS,
+        "Changed altitude did not increase fall time"
     );
 
     /*

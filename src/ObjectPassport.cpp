@@ -181,7 +181,7 @@ ObjectPassport makeAbstract500UmpkPassport() {
      * расчётного аэродинамического фокуса.
      */
     object.mass.centerOfMassXM =
-        1.17;
+        1.15;
 
     /*
      * Характерная геометрия.

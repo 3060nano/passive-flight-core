@@ -105,12 +105,16 @@ void testMassProperties() {
     );
 
     /*
-     * Центр масс перемещён вперёд относительно
-     * предыдущей конфигурации 1,20 м.
+     * Центр масс принят равным 1,15 м.
+     *
+     * Это предварительное положение выбрано после
+     * уточнения производной скоса потока так, чтобы
+     * сохранить положительный запас продольной
+     * статической устойчивости.
      */
     requireNear(
         passport.object.mass.centerOfMassXM,
-        1.17,
+        1.15,
         0.0,
         "Center of mass"
     );
@@ -235,7 +239,7 @@ void testParameterProvenance() {
 
     requireNear(
         numericValue(*centerOfMass),
-        1.17,
+        1.15,
         0.0,
         "Recorded center of mass"
     );

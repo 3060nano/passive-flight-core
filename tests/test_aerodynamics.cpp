@@ -163,6 +163,13 @@ void testBaselineGeometry() {
         "Tail installation angle is zero"
     );
 
+    checkNear(
+        geometry.downwashGradient,
+        0.57,
+        1.0e-12,
+        "Fallback downwash gradient is 0.57"
+    );
+
     check(
         geometry.tail.aerodynamicCenterXM >
             geometry.centerOfMassXM,
@@ -359,6 +366,108 @@ void testAngleOfAttackInfluence() {
         ) >
         1.0e-8,
         "Wing incidence shifts Cy-alpha relation"
+    );
+}
+
+void testBaselineDownwashTable() {
+    const passive_flight::
+        PreliminaryAerodynamicModel model;
+
+    const auto atMach04 =
+        model.evaluate(makeInput(0.4, 5.0));
+
+    const auto atMach07 =
+        model.evaluate(makeInput(0.7, 5.0));
+
+    const auto supersonicFallback =
+        model.evaluate(makeInput(1.5, 5.0));
+
+    checkNear(
+        atMach04.downwashGradient,
+        0.576,
+        1.0e-12,
+        "Baseline downwash gradient at Mach 0.4"
+    );
+
+    checkNear(
+        atMach07.downwashGradient,
+        0.5725,
+        1.0e-12,
+        "Downwash gradient is linearly interpolated by Mach"
+    );
+
+    checkNear(
+        supersonicFallback.downwashGradient,
+        0.569,
+        1.0e-12,
+        "Supersonic downwash uses last subsonic value as provisional fallback"
+    );
+}
+
+void testCustomDownwashTable() {
+    auto geometry =
+        passive_flight::makeAbstract500AerodynamicGeometry();
+
+    geometry.downwashGradient = 0.30;
+
+    const std::vector<passive_flight::DownwashGradientPoint>
+        downwashTable{
+            {0.5, 0.40},
+            {1.0, 0.60}
+        };
+
+    const passive_flight::PreliminaryAerodynamicModel model(
+        geometry,
+        passive_flight::makeAbstract500ZeroLiftDragTable(),
+        downwashTable,
+        {}
+    );
+
+    const auto result =
+        model.evaluate(makeInput(0.75, 5.0));
+
+    checkNear(
+        result.downwashGradient,
+        0.50,
+        1.0e-12,
+        "Custom downwash table is interpolated"
+    );
+
+    geometry.downwashGradient = 0.30;
+
+    const passive_flight::PreliminaryAerodynamicModel fallbackModel(
+        geometry,
+        passive_flight::makeAbstract500ZeroLiftDragTable()
+    );
+
+    const auto fallbackResult =
+        fallbackModel.evaluate(makeInput(0.75, 5.0));
+
+    check(
+        result.cyTail < fallbackResult.cyTail,
+        "Larger downwash gradient reduces tail normal-force response"
+    );
+}
+
+void testDownwashFallbackWithoutTable() {
+    auto geometry =
+        passive_flight::makeAbstract500AerodynamicGeometry();
+
+    geometry.downwashGradient = 0.42;
+
+    const passive_flight::PreliminaryAerodynamicModel model(
+        geometry,
+        passive_flight::makeAbstract500ZeroLiftDragTable()
+    );
+
+    const auto result =
+        model.evaluate(makeInput(0.8, 5.0));
+
+    checkNear(
+        result.downwashGradient,
+        0.42,
+        1.0e-12,
+        "Geometry fallback is used when downwash table is absent"
     );
 }
 
@@ -806,6 +915,55 @@ void testValidation() {
         },
         "Unsorted alpha-dot table is rejected"
     );
+
+    checkThrows<
+        std::invalid_argument
+    >(
+        []() {
+            const auto geometry =
+                passive_flight::makeAbstract500AerodynamicGeometry();
+
+            const std::vector<passive_flight::DownwashGradientPoint>
+                invalidTable{
+                    {0.8, 0.50}
+                };
+
+            const passive_flight::PreliminaryAerodynamicModel model(
+                geometry,
+                passive_flight::makeAbstract500ZeroLiftDragTable(),
+                invalidTable,
+                {}
+            );
+
+            static_cast<void>(model);
+        },
+        "Single-point downwash table is rejected"
+    );
+
+    checkThrows<
+        std::invalid_argument
+    >(
+        []() {
+            const auto geometry =
+                passive_flight::makeAbstract500AerodynamicGeometry();
+
+            const std::vector<passive_flight::DownwashGradientPoint>
+                invalidTable{
+                    {0.8, 0.50},
+                    {0.7, 0.55}
+                };
+
+            const passive_flight::PreliminaryAerodynamicModel model(
+                geometry,
+                passive_flight::makeAbstract500ZeroLiftDragTable(),
+                invalidTable,
+                {}
+            );
+
+            static_cast<void>(model);
+        },
+        "Unsorted downwash table is rejected"
+    );
 }
 
 } // namespace
@@ -816,6 +974,9 @@ int main() {
     testDragInterpolation();
     testZeroObjectAngleOfAttack();
     testAngleOfAttackInfluence();
+    testBaselineDownwashTable();
+    testCustomDownwashTable();
+    testDownwashFallbackWithoutTable();
     testPitchDamping();
     testAlphaDotDisabledWithoutTable();
     testAlphaDotTableInterpolation();

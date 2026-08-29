@@ -170,11 +170,13 @@ makeAerodynamicGeometry(
         );
 
     /*
-     * Производная скоса потока
-     * пока принимается постоянной.
+     * Резервное дозвуковое значение производной
+     * среднего угла скоса потока. При создании готовой
+     * модели базового объекта основной путь использует
+     * таблицу epsilonAlpha(M).
      */
     result.downwashGradient =
-        0.25;
+        0.57;
 
     return result;
 }
@@ -188,6 +190,7 @@ makeAerodynamicModel(
             object
         ),
         makeAbstract500ZeroLiftDragTable(),
+        makeAbstract500DownwashGradientTable(),
         makeAbstract500PitchMomentAlphaDotDerivativeTable()
     );
 }

@@ -15,6 +15,19 @@ struct DragCoefficientPoint {
 
 /**
  * Одна точка табличной зависимости производной
+ * среднего угла скоса потока по углу атаки:
+ *
+ *     epsilonAlpha = d epsilon / d alpha.
+ *
+ * Значение безразмерное.
+ */
+struct DownwashGradientPoint {
+    double mach{0.0};
+    double gradient{0.0};
+};
+
+/**
+ * Одна точка табличной зависимости производной
  * коэффициента продольного момента по безразмерной
  * скорости изменения угла атаки.
  *
@@ -101,9 +114,12 @@ struct AerodynamicGeometry {
     LiftingSurfaceAerodynamics tail;
 
     /*
-     * Производная скоса потока:
+     * Резервное значение производной скоса потока:
      *
-     * d epsilon / d alpha.
+     *     d epsilon / d alpha.
+     *
+     * Используется только если табличная зависимость
+     * downwashGradient(M) не передана в модель.
      */
     double downwashGradient{0.0};
 };
@@ -140,6 +156,14 @@ struct AerodynamicCoefficients {
 
     // Полный коэффициент сопротивления.
     double cx{0.0};
+
+    /*
+     * Использованная в текущей точке производная
+     * среднего угла скоса потока по углу атаки:
+     *
+     *     d epsilon / d alpha.
+     */
+    double downwashGradient{0.0};
 
     // Составляющая коэффициента нормальной силы от корпуса.
     double cyBody{0.0};
@@ -246,6 +270,24 @@ std::vector<DragCoefficientPoint>
 makeAbstract500ZeroLiftDragTable();
 
 /**
+ * Возвращает дозвуковую таблицу
+ *
+ *     epsilonAlpha(M) = d epsilon / d alpha
+ *
+ * для базового объекта. Значения получены по методике
+ * Лебедева--Чернобровкина, формула (3.34), с графическим
+ * определением параметров вихревой интерференции.
+ *
+ * Таблица заканчивается при M = 1.0. При больших M
+ * текущая реализация использует зажим последнего
+ * дозвукового значения как явно предварительный fallback,
+ * пока не определена функция psi_epsilon(M).
+ */
+[[nodiscard]]
+std::vector<DownwashGradientPoint>
+makeAbstract500DownwashGradientTable();
+
+/**
  * Возвращает таблицу
  *
  *     mzAlphaDotDerivative(M).
@@ -282,16 +324,32 @@ public:
     );
 
     /**
-     * Полный конструктор аэродинамической модели.
+     * Конструктор с таблицей mzAlphaDotDerivative(M),
+     * но без таблицы скоса потока.
      *
-     * alphaDotDerivativeTable может быть пустой.
-     * Пустая таблица означает:
-     *
-     *     mzAlphaDotDerivative = 0.
+     * В этом случае используется резервное значение
+     * geometry.downwashGradient.
      */
     PreliminaryAerodynamicModel(
         const AerodynamicGeometry& geometry,
         std::vector<DragCoefficientPoint> zeroLiftDragTable,
+        std::vector<PitchMomentAlphaDotDerivativePoint>
+            alphaDotDerivativeTable
+    );
+
+    /**
+     * Полный конструктор аэродинамической модели.
+     *
+     * downwashGradientTable может быть пустой. Тогда
+     * используется geometry.downwashGradient.
+     *
+     * alphaDotDerivativeTable может быть пустой. Тогда
+     * mzAlphaDotDerivative = 0.
+     */
+    PreliminaryAerodynamicModel(
+        const AerodynamicGeometry& geometry,
+        std::vector<DragCoefficientPoint> zeroLiftDragTable,
+        std::vector<DownwashGradientPoint> downwashGradientTable,
         std::vector<PitchMomentAlphaDotDerivativePoint>
             alphaDotDerivativeTable
     );
@@ -318,6 +376,13 @@ public:
     zeroLiftDragTable() const noexcept;
 
     /**
+     * Возвращает таблицу epsilonAlpha(M).
+     */
+    [[nodiscard]]
+    const std::vector<DownwashGradientPoint>&
+    downwashGradientTable() const noexcept;
+
+    /**
      * Возвращает таблицу mzAlphaDotDerivative(M).
      */
     [[nodiscard]]
@@ -329,6 +394,9 @@ private:
 
     std::vector<DragCoefficientPoint>
         zeroLiftDragTable_;
+
+    std::vector<DownwashGradientPoint>
+        downwashGradientTable_;
 
     std::vector<PitchMomentAlphaDotDerivativePoint>
         alphaDotDerivativeTable_;

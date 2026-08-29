@@ -211,13 +211,32 @@ void testAerodynamicBalance() {
         "Mz-alpha derivative must be negative"
     );
 
-    require(
-        balance.trimAngleOfAttackRad > 0.0,
-        "Trim angle of attack must be positive"
+    /*
+     * В текущей конфигурации
+     *
+     *     x_CM = x_F,wing = 1.15 м.
+     *
+     * Поэтому положительный угол установки крыла
+     * создаёт ненулевую нормальную силу при alpha = 0,
+     * но не создаёт свободного статического момента
+     * относительно центра масс.
+     *
+     * При нулевом угле установки стабилизатора и
+     * нулевой нормальной силе корпуса при alpha = 0
+     * балансировочный угол атаки должен быть близок
+     * к нулю, а не обязательно положителен.
+     */
+    requireNear(
+        balance.trimAngleOfAttackRad,
+        0.0,
+        1.0e-8,
+        "Trim angle of attack must be near zero"
     );
 
     require(
-        balance.trimAngleOfAttackRad <
+        std::abs(
+            balance.trimAngleOfAttackRad
+        ) <
             10.0 *
             std::numbers::pi_v<double> /
             180.0,

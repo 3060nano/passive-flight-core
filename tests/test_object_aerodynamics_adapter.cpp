@@ -133,9 +133,16 @@ void testBaselineConversion() {
         1.0e-12,
         "Ogival nose normal-force factor"
     );
+
+    checkNear(
+        geometry.wing.aerodynamicCenterXM,
+        geometry.centerOfMassXM,
+        1.0e-12,
+        "Baseline wing aerodynamic center coincides with center of mass"
+    );
 }
 
-void testWingGeometryInfluence() {
+void testWingSpanInfluenceAtZeroMomentArm() {
     auto passport =
         passive_flight::makeAbstract500UmpkPassport();
 
@@ -178,15 +185,67 @@ void testWingGeometryInfluence() {
     check(
         modifiedResult.cyWing >
             baselineResult.cyWing,
-        "Changing wing geometry changes wing lift"
+        "Increasing wing span changes wing lift"
     );
+
+    /*
+     * В базовой конфигурации:
+     *
+     *     x_AC,wing = x_CM = 1.15 м.
+     *
+     * Поэтому статический момент нормальной силы
+     * крыла относительно центра масс равен нулю.
+     * Изменение только размаха крыла меняет cyWing,
+     * но при неизменном нулевом плече не обязано
+     * менять mzStatic.
+     */
+    checkNear(
+        modifiedResult.mzStatic,
+        baselineResult.mzStatic,
+        1.0e-12,
+        "Wing span change at zero moment arm must not change static Mz"
+    );
+}
+
+void testWingAerodynamicCenterInfluence() {
+    auto passport =
+        passive_flight::makeAbstract500UmpkPassport();
+
+    const auto baselineGeometry =
+        passive_flight::makeAerodynamicGeometry(
+            passport.object
+        );
+
+    auto modifiedGeometry =
+        baselineGeometry;
+
+    modifiedGeometry.wing.aerodynamicCenterXM +=
+        0.05;
+
+    const passive_flight::PreliminaryAerodynamicModel baselineModel(
+        baselineGeometry,
+        passive_flight::makeAbstract500ZeroLiftDragTable()
+    );
+
+    const passive_flight::PreliminaryAerodynamicModel modifiedModel(
+        modifiedGeometry,
+        passive_flight::makeAbstract500ZeroLiftDragTable()
+    );
+
+    const auto input = makeTestInput();
+
+    const auto baselineResult =
+        baselineModel.evaluate(input);
+
+    const auto modifiedResult =
+        modifiedModel.evaluate(input);
 
     check(
         std::abs(
-            modifiedResult.mz -
-            baselineResult.mz
+            modifiedResult.mzStatic -
+            baselineResult.mzStatic
         ) > 1.0e-6,
-        "Changing wing geometry changes pitching moment"
+        "Changing wing aerodynamic-center position changes static pitching moment"
     );
 }
 
@@ -330,7 +389,8 @@ void testReadyModelCreation() {
 
 int main() {
     testBaselineConversion();
-    testWingGeometryInfluence();
+    testWingSpanInfluenceAtZeroMomentArm();
+    testWingAerodynamicCenterInfluence();
     testTailGeometryInfluence();
     testNoseShapeInfluence();
     testReadyModelCreation();
