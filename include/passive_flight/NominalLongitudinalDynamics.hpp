@@ -6,6 +6,8 @@
 #include "passive_flight/ObjectModel.hpp"
 #include "passive_flight/Types.hpp"
 
+#include <memory>
+
 namespace passive_flight {
 
 /**
@@ -31,12 +33,7 @@ struct LongitudinalAerodynamicLoads {
  * Полный результат вычисления правых частей системы.
  *
  * Помимо производных состояния здесь сохраняются
- * промежуточные значения. Они потребуются:
- *
- * - для тестирования;
- * - для построения графиков;
- * - для подробного вывода в приложении;
- * - для передачи диагностических данных в SimInTech.
+ * промежуточные значения.
  */
 struct LongitudinalDynamicsEvaluation {
     StateDerivative derivative;
@@ -58,6 +55,10 @@ struct LongitudinalDynamicsEvaluation {
  *
  * Двигательная установка отсутствует.
  * Тяга принимается равной нулю.
+ *
+ * Класс зависит только от общего контракта
+ * AerodynamicModel и не знает, каким способом
+ * получены Cx, Cy и mz.
  */
 class NominalLongitudinalDynamics {
 public:
@@ -89,13 +90,20 @@ public:
     const StandardAtmosphere& atmosphere() const noexcept;
 
     [[nodiscard]]
-    const PreliminaryAerodynamicModel&
+    const AerodynamicModel&
     aerodynamics() const noexcept;
 
 private:
     ObjectModel object_;
     StandardAtmosphere atmosphere_;
-    PreliminaryAerodynamicModel aerodynamics_;
+
+    /*
+     * shared_ptr сохраняет копируемость
+     * NominalLongitudinalDynamics и существующих
+     * классов возмущённого движения.
+     */
+    std::shared_ptr<const AerodynamicModel>
+        aerodynamics_;
 };
 
 } // namespace passive_flight

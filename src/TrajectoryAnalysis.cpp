@@ -330,11 +330,25 @@ AerodynamicBalanceAnalysis analyzeAerodynamicBalance(
         );
     }
 
-    const PreliminaryAerodynamicModel model =
+    /*
+     * После введения общего интерфейса makeAerodynamicModel()
+     * возвращает shared_ptr<const AerodynamicModel>.
+     *
+     * Анализ балансировки не должен зависеть от конкретной
+     * реализации аэродинамики, поэтому здесь также работаем
+     * только через общий контракт AerodynamicModel.
+     */
+    const auto model =
         makeAerodynamicModel(object);
 
+    if (!model) {
+        throw std::runtime_error(
+            "Aerodynamic model must not be null"
+        );
+    }
+
     const AerodynamicCoefficients atZero =
-        model.evaluate(
+        model->evaluate(
             makeStaticAerodynamicInput(
                 mach,
                 0.0
@@ -342,7 +356,7 @@ AerodynamicBalanceAnalysis analyzeAerodynamicBalance(
         );
 
     const AerodynamicCoefficients atPositiveStep =
-        model.evaluate(
+        model->evaluate(
             makeStaticAerodynamicInput(
                 mach,
                 kDerivativeStepRad
@@ -379,7 +393,7 @@ AerodynamicBalanceAnalysis analyzeAerodynamicBalance(
         object.wing.installationAngleRad;
 
     const AerodynamicCoefficients atTrim =
-        model.evaluate(
+        model->evaluate(
             makeStaticAerodynamicInput(
                 mach,
                 analysis.trimAngleOfAttackRad

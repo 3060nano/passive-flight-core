@@ -37,17 +37,43 @@ struct MassProperties {
 /*
  * Характерная геометрия.
  *
- * Эти значения используются для вычисления аэродинамических
- * сил и моментов:
+ * areaM2 используется для вычисления сил и моментов:
  *
- *     X  = q * S * Cx;
- *     Y  = q * S * Cy;
- *     Mz = q * S * cBar * mz.
+ *     X  = q * S_ref * Cx;
+ *     Y  = q * S_ref * Cy;
+ *
+ * referenceLengthM используется для размерного момента:
+ *
+ *     Mz = q * S_ref * L_ref * mz.
+ *
+ * Для крылатого объекта L_ref обычно равна САХ крыла.
+ * Для осесимметричной бомбы L_ref может быть равна длине корпуса.
+ *
+ * Поля spanM и meanAerodynamicChordM пока сохранены для
+ * совместимости с существующей геометрической аэродинамикой
+ * и диагностикой числа Рейнольдса.
  */
 struct ReferenceGeometry {
     double areaM2{};
     double spanM{};
     double meanAerodynamicChordM{};
+
+    /*
+     * Универсальная характерная длина для коэффициента момента.
+     *
+     * Если значение не задано (> 0), временно используется
+     * meanAerodynamicChordM. Это сохраняет поведение текущего
+     * ABSTRACT_500_UMPK_V1 без изменения его паспорта.
+     */
+    double referenceLengthM{};
+
+    [[nodiscard]]
+    double effectiveReferenceLengthM() const noexcept {
+        return
+            referenceLengthM > 0.0
+                ? referenceLengthM
+                : meanAerodynamicChordM;
+    }
 };
 
 /*

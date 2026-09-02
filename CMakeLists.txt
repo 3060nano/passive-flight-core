@@ -21,6 +21,7 @@ add_library(
         src/ObjectPassport.cpp
         src/StandardAtmosphere.cpp
         src/Aerodynamics.cpp
+        src/TabulatedAerodynamicModel.cpp
         src/ObjectAerodynamicsAdapter.cpp
         src/NominalLongitudinalDynamics.cpp
         src/PerturbedLongitudinalDynamics.cpp
@@ -407,6 +408,12 @@ if (BUILD_TESTING)
             test_aerodynamics
             tests/test_aerodynamics.cpp
             aerodynamics
+    )
+
+    add_core_test(
+            test_tabulated_aerodynamic_model
+            tests/test_tabulated_aerodynamic_model.cpp
+            tabulated_aerodynamic_model
     )
 
     add_core_test(

@@ -1,5 +1,6 @@
 #include "passive_flight/ObjectAerodynamicsAdapter.hpp"
 
+#include <memory>
 #include <stdexcept>
 
 namespace passive_flight {
@@ -74,14 +75,6 @@ makeWingAerodynamics(
     result.efficiencyFactor =
         wing.efficiencyFactor;
 
-    /*
-     * Угол установки крыла напрямую
-     * передаётся из ObjectModel.
-     *
-     * Для текущего базового объекта:
-     *
-     *     iWing = +3 градуса.
-     */
     result.installationAngleRad =
         wing.installationAngleRad;
 
@@ -128,6 +121,9 @@ makeAerodynamicGeometry(
 
     /*
      * Характерные размеры всего объекта.
+     *
+     * PreliminaryAerodynamicModel пока по-прежнему
+     * использует САХ крыла как свою характерную длину.
      */
     result.referenceAreaM2 =
         object.reference.areaM2;
@@ -171,9 +167,7 @@ makeAerodynamicGeometry(
 
     /*
      * Резервное дозвуковое значение производной
-     * среднего угла скоса потока. При создании готовой
-     * модели базового объекта основной путь использует
-     * таблицу epsilonAlpha(M).
+     * среднего угла скоса потока.
      */
     result.downwashGradient =
         0.57;
@@ -181,18 +175,28 @@ makeAerodynamicGeometry(
     return result;
 }
 
-PreliminaryAerodynamicModel
+std::shared_ptr<const AerodynamicModel>
 makeAerodynamicModel(
     const ObjectModel& object
 ) {
-    return PreliminaryAerodynamicModel(
-        makeAerodynamicGeometry(
-            object
-        ),
-        makeAbstract500ZeroLiftDragTable(),
-        makeAbstract500DownwashGradientTable(),
-        makeAbstract500PitchMomentAlphaDotDerivativeTable()
-    );
+    /*
+     * На первом этапе существующий объект продолжает
+     * использовать старую PreliminaryAerodynamicModel.
+     *
+     * На следующем шаге здесь появится выбор между
+     * Preliminary/GeometryBased и Tabulated по паспорту.
+     */
+    return
+        std::make_shared<
+            PreliminaryAerodynamicModel
+        >(
+            makeAerodynamicGeometry(
+                object
+            ),
+            makeAbstract500ZeroLiftDragTable(),
+            makeAbstract500DownwashGradientTable(),
+            makeAbstract500PitchMomentAlphaDotDerivativeTable()
+        );
 }
 
 } // namespace passive_flight

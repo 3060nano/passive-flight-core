@@ -31,7 +31,7 @@ struct DownwashGradientPoint {
  * коэффициента продольного момента по безразмерной
  * скорости изменения угла атаки.
  *
- * Используемое соглашение:
+ * Используемое соглашение предварительной модели:
  *
  *     alphaDotBar =
  *         alphaDot * referenceChord / (2 * V)
@@ -41,14 +41,9 @@ struct DownwashGradientPoint {
  *     mzAlphaDot =
  *         mzAlphaDotDerivative * alphaDotBar.
  *
- * Поэтому mzAlphaDotDerivative является
- * безразмерной производной:
- *
- *     d(mz) / d(alphaDotBar).
- *
- * Если исходная таблица в будущем будет использовать
- * другую нормировку alphaDot, данные необходимо
- * предварительно привести к этому соглашению.
+ * Если источник использует другую нормировку alphaDot,
+ * данные должны быть приведены к соглашению конкретной
+ * аэродинамической модели.
  */
 struct PitchMomentAlphaDotDerivativePoint {
     double mach{0.0};
@@ -81,7 +76,8 @@ struct LiftingSurfaceAerodynamics {
 
 /**
  * Геометрические и настроечные параметры,
- * необходимые непосредственно аэродинамической модели.
+ * необходимые непосредственно предварительной
+ * аэродинамической модели крылатого объекта.
  */
 struct AerodynamicGeometry {
     // Характерная площадь объекта, м^2.
@@ -146,12 +142,30 @@ struct AerodynamicInput {
 
 /**
  * Результат расчёта аэродинамических коэффициентов.
+ *
+ * Конкретная аэродинамическая модель обязана явно
+ * документировать нормировку безразмерной угловой скорости,
+ * если она использует производную момента по omega_z.
+ *
+ * Для будущей табличной модели ФАБ-1500Т используется
+ * соглашение Лебедева--Чернобровкина и Постникова--Чуйко:
+ *
+ *     omegaZBar = omega_z * L_ref / V.
+ *
+ * Текущая PreliminaryAerodynamicModel пока сохраняет
+ * своё прежнее соглашение с referenceChord / (2 * V),
+ * чтобы на этом этапе не менять её численные результаты.
  */
 struct AerodynamicCoefficients {
     // Коэффициент сопротивления при нулевой подъёмной силе.
     double cx0{0.0};
 
-    // Индуктивная составляющая сопротивления.
+    /*
+     * Добавочная составляющая сопротивления, зависящая
+     * от угла атаки. Для предварительной модели это
+     * индуктивное сопротивление; для табличной бомбы
+     * здесь будет Cx^(alpha^2) * alpha^2.
+     */
     double cxInduced{0.0};
 
     // Полный коэффициент сопротивления.
@@ -159,9 +173,7 @@ struct AerodynamicCoefficients {
 
     /*
      * Использованная в текущей точке производная
-     * среднего угла скоса потока по углу атаки:
-     *
-     *     d epsilon / d alpha.
+     * среднего угла скоса потока по углу атаки.
      */
     double downwashGradient{0.0};
 
@@ -196,62 +208,42 @@ struct AerodynamicCoefficients {
     double mzAlphaPerRad{0.0};
 
     /*
-     * Вклад корпуса в производную коэффициента момента
-     * по безразмерной угловой скорости:
+     * Диагностические составляющие производной момента
+     * по безразмерной угловой скорости.
      *
-     * omegaZBar =
-     *     omega_z * referenceChord / (2 * V).
-     *
-     * На текущем этапе корпус представляется
-     * сосредоточенной нормальной силой в его
-     * аэродинамическом центре.
+     * Нормировка безразмерной угловой скорости определяется
+     * конкретной аэродинамической моделью и её источником.
      */
     double mzPitchRateBodyDerivative{0.0};
-
-    /*
-     * Вклад крыла в производную коэффициента момента
-     * по безразмерной угловой скорости.
-     *
-     * Пока равен нулю, поскольку для крыла требуется
-     * отдельная методика распределённой нагрузки.
-     * Нулевое значение здесь означает "не смоделировано",
-     * а не физическое отсутствие демпфирования крыла.
-     */
     double mzPitchRateWingDerivative{0.0};
-
-    /*
-     * Вклад стабилизатора в производную коэффициента момента
-     * по безразмерной угловой скорости.
-     *
-     * Используется приближение сосредоточенной
-     * нормальной силы на длинном плече относительно центра масс.
-     */
     double mzPitchRateTailDerivative{0.0};
-
-    /*
-     * Полная производная коэффициента момента
-     * по безразмерной угловой скорости:
-     *
-     * mzPitchRateDerivative =
-     *     mzPitchRateBodyDerivative +
-     *     mzPitchRateWingDerivative +
-     *     mzPitchRateTailDerivative.
-     */
     double mzPitchRateDerivative{0.0};
 
     /*
      * Производная коэффициента момента по безразмерной
-     * скорости изменения угла атаки:
-     *
-     * alphaDotBar =
-     *     alphaDot * referenceChord / (2 * V).
-     *
-     * В текущей модели определяется из таблицы
-     * mzAlphaDotDerivative(M).
-     *
-     * При отсутствии таблицы равна нулю.
+     * скорости изменения угла атаки.
      */
     double mzAlphaDotDerivative{0.0};
+};
+
+/**
+ * Общий контракт аэродинамической модели.
+ *
+ * Динамика не должна знать, каким способом получены
+ * коэффициенты:
+ *
+ * - из готовых табличных аэродинамических характеристик;
+ * - из геометрии;
+ * - из пользовательской геометрии.
+ */
+class AerodynamicModel {
+public:
+    virtual ~AerodynamicModel() = default;
+
+    [[nodiscard]]
+    virtual AerodynamicCoefficients evaluate(
+        const AerodynamicInput& input
+    ) const = 0;
 };
 
 /**
@@ -274,14 +266,7 @@ makeAbstract500ZeroLiftDragTable();
  *
  *     epsilonAlpha(M) = d epsilon / d alpha
  *
- * для базового объекта. Значения получены по методике
- * Лебедева--Чернобровкина, формула (3.34), с графическим
- * определением параметров вихревой интерференции.
- *
- * Таблица заканчивается при M = 1.0. При больших M
- * текущая реализация использует зажим последнего
- * дозвукового значения как явно предварительный fallback,
- * пока не определена функция psi_epsilon(M).
+ * для базового объекта.
  */
 [[nodiscard]]
 std::vector<DownwashGradientPoint>
@@ -292,15 +277,8 @@ makeAbstract500DownwashGradientTable();
  *
  *     mzAlphaDotDerivative(M).
  *
- * На текущем этапе надёжные исходные данные
- * отсутствуют, поэтому таблица пустая.
- *
- * Пустая таблица означает:
- *
- *     mzAlphaDotDerivative = 0.
- *
- * Когда зависимость будет оцифрована,
- * достаточно заполнить эту функцию табличными точками.
+ * На текущем этапе надёжные исходные данные отсутствуют,
+ * поэтому таблица пустая.
  */
 [[nodiscard]]
 std::vector<PitchMomentAlphaDotDerivativePoint>
@@ -308,8 +286,12 @@ makeAbstract500PitchMomentAlphaDotDerivativeTable();
 
 /**
  * Расчётная аэродинамическая модель первого приближения.
+ *
+ * На этом этапе её физика не изменяется. Класс только
+ * начинает реализовывать общий контракт AerodynamicModel.
  */
-class PreliminaryAerodynamicModel {
+class PreliminaryAerodynamicModel final
+    : public AerodynamicModel {
 public:
     PreliminaryAerodynamicModel();
 
@@ -326,9 +308,6 @@ public:
     /**
      * Конструктор с таблицей mzAlphaDotDerivative(M),
      * но без таблицы скоса потока.
-     *
-     * В этом случае используется резервное значение
-     * geometry.downwashGradient.
      */
     PreliminaryAerodynamicModel(
         const AerodynamicGeometry& geometry,
@@ -339,12 +318,6 @@ public:
 
     /**
      * Полный конструктор аэродинамической модели.
-     *
-     * downwashGradientTable может быть пустой. Тогда
-     * используется geometry.downwashGradient.
-     *
-     * alphaDotDerivativeTable может быть пустой. Тогда
-     * mzAlphaDotDerivative = 0.
      */
     PreliminaryAerodynamicModel(
         const AerodynamicGeometry& geometry,
@@ -360,7 +333,7 @@ public:
     [[nodiscard]]
     AerodynamicCoefficients evaluate(
         const AerodynamicInput& input
-    ) const;
+    ) const override;
 
     /**
      * Возвращает используемую геометрию.

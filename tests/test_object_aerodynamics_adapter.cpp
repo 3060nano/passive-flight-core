@@ -268,10 +268,10 @@ void testTailGeometryInfluence() {
     const auto input = makeTestInput();
 
     const auto baselineResult =
-        baselineModel.evaluate(input);
+        baselineModel->evaluate(input);
 
     const auto modifiedResult =
-        modifiedModel.evaluate(input);
+        modifiedModel->evaluate(input);
 
     check(
         modifiedResult.cyTail >
@@ -333,10 +333,10 @@ void testNoseShapeInfluence() {
     const auto input = makeTestInput();
 
     const auto ogivalResult =
-        ogivalModel.evaluate(input);
+        ogivalModel->evaluate(input);
 
     const auto conicalResult =
-        conicalModel.evaluate(input);
+        conicalModel->evaluate(input);
 
     check(
         std::abs(
@@ -365,7 +365,7 @@ void testReadyModelCreation() {
         );
 
     const auto result =
-        model.evaluate(
+        model->evaluate(
             makeTestInput()
         );
 
