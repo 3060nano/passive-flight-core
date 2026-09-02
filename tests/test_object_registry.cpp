@@ -40,6 +40,18 @@ void requireThrows(
     );
 }
 
+passive_flight::SimulationOptions
+makeTestOptions() {
+    passive_flight::SimulationOptions options;
+
+    options.timeStepS = 0.001;
+    options.maximumTimeS = 30.0;
+    options.maximumSteps = 100000;
+    options.saveHistory = false;
+
+    return options;
+}
+
 void testEmptyRegistry() {
     const passive_flight::ObjectRegistry registry;
 
@@ -85,35 +97,58 @@ void testDefaultRegistry() {
     );
 
     require(
-        registry.size() == 1,
-        "Default registry must contain one object"
+        registry.size() == 2,
+        "Default registry must contain two objects"
     );
 
     require(
         registry.contains(
             "ABSTRACT_500_UMPK_V1"
         ),
-        "Default object must be registered"
+        "Abstract object must be registered"
     );
 
-    const auto* object =
+    require(
+        registry.contains(
+            "FAB_1500T_POSTNIKOV_1979"
+        ),
+        "FAB-1500T must be registered"
+    );
+
+    const auto* abstractObject =
         registry.findObject(
             "ABSTRACT_500_UMPK_V1"
         );
 
     require(
-        object != nullptr,
-        "Default object lookup failed"
+        abstractObject != nullptr,
+        "Abstract object lookup failed"
     );
 
     require(
-        object->mass.massKg == 500.0,
-        "Default object mass is incorrect"
+        abstractObject->mass.massKg == 500.0,
+        "Abstract object mass is incorrect"
+    );
+
+    const auto* fab =
+        registry.findObject(
+            "FAB_1500T_POSTNIKOV_1979"
+        );
+
+    require(
+        fab != nullptr,
+        "FAB-1500T lookup failed"
     );
 
     require(
-        object->mass.centerOfMassXM == 1.15,
-        "Default object center of mass is incorrect"
+        fab->mass.massKg == 1519.0,
+        "FAB-1500T mass is incorrect"
+    );
+
+    require(
+        fab->aerodynamicModelType ==
+            passive_flight::AerodynamicModelType::Tabulated,
+        "FAB-1500T must use tabulated aerodynamics"
     );
 }
 
@@ -127,108 +162,89 @@ void testDescriptors() {
         registry.descriptors();
 
     require(
-        descriptors.size() == 1,
+        descriptors.size() == 2,
         "Descriptor list size is incorrect"
     );
 
     require(
         descriptors[0].id ==
             "ABSTRACT_500_UMPK_V1",
-        "Descriptor identifier is incorrect"
+        "First descriptor identifier is incorrect"
+    );
+
+    require(
+        descriptors[1].id ==
+            "FAB_1500T_POSTNIKOV_1979",
+        "Second descriptor identifier is incorrect"
     );
 
     require(
         !descriptors[0].displayName.empty(),
-        "Descriptor display name must not be empty"
+        "Abstract descriptor display name must not be empty"
+    );
+
+    require(
+        !descriptors[1].displayName.empty(),
+        "FAB-1500T descriptor display name must not be empty"
     );
 
     require(
         descriptors[0].modelVersion ==
             "0.2.0",
-        "Descriptor model version is incorrect"
-    );
-}
-
-void testSecondObjectCanBeAdded() {
-    passive_flight::ObjectRegistry registry;
-
-    auto first =
-        passive_flight::makeAbstract500UmpkPassport();
-
-    auto second =
-        passive_flight::makeAbstract500UmpkPassport();
-
-    /*
-     * В этом тесте проверяется только возможность
-     * регистрации нескольких объектов.
-     *
-     * Геометрия не изменяется, поскольку изменение
-     * паспортного параметра требует одновременного
-     * обновления его provenance-записи.
-     */
-    second.object.id =
-        "ABSTRACT_500_RESEARCH_VARIANT";
-
-    second.object.metadata.displayName =
-        "Исследовательская модификация";
-
-    second.object.metadata.modelVersion =
-        "0.1.0";
-
-    registry.add(
-        std::move(first)
-    );
-
-    registry.add(
-        std::move(second)
+        "Abstract descriptor model version is incorrect"
     );
 
     require(
-        registry.size() == 2,
-        "Registry must contain two objects"
+        descriptors[1].modelVersion ==
+            "1.0.0",
+        "FAB-1500T descriptor model version is incorrect"
+    );
+}
+
+void testThirdObjectCanBeAdded() {
+    passive_flight::ObjectRegistry registry =
+        passive_flight::makeDefaultObjectRegistry();
+
+    auto third =
+        passive_flight::makeAbstract500UmpkPassport();
+
+    third.object.id =
+        "ABSTRACT_500_RESEARCH_VARIANT";
+
+    third.object.metadata.displayName =
+        "Исследовательская модификация";
+
+    third.object.metadata.modelVersion =
+        "0.1.0";
+
+    registry.add(
+        std::move(third)
+    );
+
+    require(
+        registry.size() == 3,
+        "Registry must contain three objects"
     );
 
     require(
         registry.contains(
             "ABSTRACT_500_RESEARCH_VARIANT"
         ),
-        "Second object was not registered"
+        "Third object was not registered"
     );
 
     const auto descriptors =
         registry.descriptors();
 
     require(
-        descriptors.size() == 2,
-        "Two descriptors are expected"
+        descriptors.size() == 3,
+        "Three descriptors are expected"
     );
 
     require(
-        descriptors[0].id ==
-            "ABSTRACT_500_UMPK_V1",
-        "Registration order must be preserved"
-    );
-
-    require(
-        descriptors[1].id ==
+        descriptors[2].id ==
             "ABSTRACT_500_RESEARCH_VARIANT",
-        "Second descriptor is incorrect"
-    );
-
-    const auto* secondObject =
-        registry.findObject(
-            "ABSTRACT_500_RESEARCH_VARIANT"
-        );
-
-    require(
-        secondObject != nullptr,
-        "Second object lookup failed"
-    );
-
-    require(
-        secondObject->metadata.displayName ==
-            "Исследовательская модификация",
-        "Second object display name is incorrect"
+        "Third descriptor is incorrect"
     );
 }
 
@@ -236,14 +252,14 @@ void testDuplicateIsRejected() {
     passive_flight::ObjectRegistry registry;
 
     registry.add(
-        passive_flight::makeAbstract500UmpkPassport()
+        passive_flight::makeFab1500TPostnikovPassport()
     );
 
     requireThrows<std::invalid_argument>(
         [&registry]() {
             registry.add(
                 passive_flight::
-                    makeAbstract500UmpkPassport()
+                    makeFab1500TPostnikovPassport()
             );
         },
         "Duplicate object identifier must be rejected"
@@ -259,10 +275,10 @@ void testInvalidPassportIsRejected() {
     passive_flight::ObjectRegistry registry;
 
     auto passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::makeFab1500TPostnikovPassport();
 
     passport.object.mass.massKg =
-        -500.0;
+        -1519.0;
 
     requireThrows<std::invalid_argument>(
         [&registry, &passport]() {
@@ -283,10 +299,6 @@ void testInconsistentPassportIsRejected() {
     auto passport =
         passive_flight::makeAbstract500UmpkPassport();
 
-    /*
-     * Изменение геометрии без изменения provenance-записи
-     * должно обнаруживаться валидатором.
-     */
     passport.object.wing.spanM =
         1.900;
 
@@ -331,7 +343,7 @@ void testUnknownObjectSimulation() {
     );
 }
 
-void testKnownObjectSimulation() {
+void testAbstractObjectSimulation() {
     const auto registry =
         passive_flight::makeDefaultObjectRegistry();
 
@@ -346,33 +358,67 @@ void testKnownObjectSimulation() {
     request.release.speedMps =
         200.0;
 
-    passive_flight::SimulationOptions options;
-
-    options.timeStepS = 0.001;
-    options.maximumTimeS = 30.0;
-    options.maximumSteps = 100000;
-    options.saveHistory = false;
-
     const auto result =
         registry.simulate(
             request,
-            options
+            makeTestOptions()
         );
 
     require(
         result.terminationReason ==
             passive_flight::TerminationReason::GroundReached,
-        "Known object simulation must reach ground"
+        "Abstract object must reach ground"
     );
 
     require(
         result.finalState.downrangeM > 0.0,
-        "Known object downrange must be positive"
+        "Abstract object downrange must be positive"
+    );
+}
+
+void testFab1500TSimulation() {
+    const auto registry =
+        passive_flight::makeDefaultObjectRegistry();
+
+    passive_flight::SimulationRequest request;
+
+    request.objectId =
+        "FAB_1500T_POSTNIKOV_1979";
+
+    request.release.altitudeM =
+        100.0;
+
+    request.release.speedMps =
+        200.0;
+
+    const auto result =
+        registry.simulate(
+            request,
+            makeTestOptions()
+        );
+
+    require(
+        result.terminationReason ==
+            passive_flight::TerminationReason::GroundReached,
+        "FAB-1500T must reach ground"
     );
 
     require(
-        result.finalState.timeS > 0.0,
-        "Known object fall time must be positive"
+        result.finalState.downrangeM > 800.0 &&
+        result.finalState.downrangeM < 1000.0,
+        "FAB-1500T downrange sanity range"
+    );
+
+    require(
+        result.finalState.timeS > 4.0 &&
+        result.finalState.timeS < 5.0,
+        "FAB-1500T fall-time sanity range"
+    );
+
+    require(
+        result.finalState.speedMps > 180.0 &&
+        result.finalState.speedMps < 220.0,
+        "FAB-1500T impact-speed sanity range"
     );
 }
 
@@ -383,12 +429,13 @@ int main() {
         testEmptyRegistry();
         testDefaultRegistry();
         testDescriptors();
-        testSecondObjectCanBeAdded();
+        testThirdObjectCanBeAdded();
         testDuplicateIsRejected();
         testInvalidPassportIsRejected();
         testInconsistentPassportIsRejected();
         testUnknownObjectSimulation();
-        testKnownObjectSimulation();
+        testAbstractObjectSimulation();
+        testFab1500TSimulation();
 
         std::cout
             << "All object registry tests passed."

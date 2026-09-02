@@ -169,8 +169,24 @@ SimulationResult ObjectRegistry::simulate(
 ObjectRegistry makeDefaultObjectRegistry() {
     ObjectRegistry registry;
 
+    /*
+     * Экспериментальный крылатый объект
+     * с предварительной геометрической
+     * аэродинамической моделью.
+     */
     registry.add(
         makeAbstract500UmpkPassport()
+    );
+
+    /*
+     * Контрольный объект варианта №1:
+     * реальная ФАБ-1500Т с готовыми
+     * табличными аэродинамическими
+     * характеристиками по Постникову
+     * и Чуйко, 1979.
+     */
+    registry.add(
+        makeFab1500TPostnikovPassport()
     );
 
     return registry;
