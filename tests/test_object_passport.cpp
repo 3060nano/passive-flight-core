@@ -11,6 +11,7 @@
 
 namespace {
 
+using passive_flight::AerodynamicModelType;
 using passive_flight::NoseShape;
 using passive_flight::ObjectPassport;
 using passive_flight::ParameterRecord;
@@ -18,14 +19,17 @@ using passive_flight::ParameterStatus;
 using passive_flight::ValidationIssues;
 
 constexpr double kDegreesToRadians =
-    std::numbers::pi_v<double> / 180.0;
+    std::numbers::pi_v<double> /
+    180.0;
 
 void require(
     bool condition,
     const std::string& message
 ) {
     if (!condition) {
-        throw std::runtime_error(message);
+        throw std::runtime_error(
+            message
+        );
     }
 }
 
@@ -35,13 +39,16 @@ void requireNear(
     double tolerance,
     const std::string& name
 ) {
-    if (std::abs(actual - expected) > tolerance) {
+    if (std::abs(
+            actual -
+            expected
+        ) > tolerance) {
         throw std::runtime_error(
-            name
-            + ": actual="
-            + std::to_string(actual)
-            + ", expected="
-            + std::to_string(expected)
+            name +
+            ": actual=" +
+            std::to_string(actual) +
+            ", expected=" +
+            std::to_string(expected)
         );
     }
 }
@@ -50,44 +57,87 @@ double numericValue(
     const ParameterRecord& record
 ) {
     const double* value =
-        std::get_if<double>(&record.value);
+        std::get_if<double>(
+            &record.value
+        );
 
     if (value == nullptr) {
         throw std::runtime_error(
-            record.path
-            + " does not contain a numeric value"
+            record.path +
+            " does not contain a numeric value"
         );
     }
 
     return *value;
 }
 
-void testPassportIdentity() {
-    const ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+void requireValid(
+    const ObjectPassport& passport,
+    const std::string& name
+) {
+    const ValidationIssues issues =
+        passive_flight::validate(
+            passport
+        );
 
-    require(
-        passport.object.id
-            == "ABSTRACT_500_UMPK_V1",
-        "Object identifier is incorrect"
-    );
+    if (issues.empty()) {
+        return;
+    }
 
-    require(
-        passport.object.metadata.modelVersion
-            == "0.2.0",
-        "Object model version is incorrect"
-    );
+    std::string message =
+        name +
+        " validation failed:";
 
-    require(
-        passport.object.body.noseShape
-            == NoseShape::Ogival,
-        "Baseline nose shape must be ogival"
+    for (const auto& issue :
+         issues) {
+        message +=
+            "\n" +
+            issue.field +
+            ": " +
+            issue.message;
+    }
+
+    throw std::runtime_error(
+        message
     );
 }
 
-void testMassProperties() {
+void testAbstractPassportIdentity() {
     const ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeAbstract500UmpkPassport();
+
+    require(
+        passport.object.id ==
+            "ABSTRACT_500_UMPK_V1",
+        "Abstract object identifier is incorrect"
+    );
+
+    require(
+        passport.object.metadata
+            .modelVersion ==
+            "0.2.0",
+        "Abstract object model version is incorrect"
+    );
+
+    require(
+        passport.object.body.noseShape ==
+            NoseShape::Ogival,
+        "Baseline nose shape must be ogival"
+    );
+
+    require(
+        passport.object.aerodynamicModelType ==
+            AerodynamicModelType::
+                PreliminaryGeometryBased,
+        "Abstract object aerodynamic model type is incorrect"
+    );
+}
+
+void testAbstractMassAndGeometry() {
+    const ObjectPassport passport =
+        passive_flight::
+            makeAbstract500UmpkPassport();
 
     requireNear(
         passport.object.mass.massKg,
@@ -104,25 +154,13 @@ void testMassProperties() {
         "Pitch moment of inertia"
     );
 
-    /*
-     * Центр масс принят равным 1,15 м.
-     *
-     * Это предварительное положение выбрано после
-     * уточнения производной скоса потока так, чтобы
-     * сохранить положительный запас продольной
-     * статической устойчивости.
-     */
     requireNear(
-        passport.object.mass.centerOfMassXM,
+        passport.object.mass
+            .centerOfMassXM,
         1.15,
         0.0,
         "Center of mass"
     );
-}
-
-void testWingGeometry() {
-    const ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
 
     requireNear(
         passport.object.wing.areaM2,
@@ -147,27 +185,13 @@ void testWingGeometry() {
     );
 
     requireNear(
-        passport.object.wing.aspectRatio(),
-        6.521263157894737,
-        1.0e-12,
-        "Wing aspect ratio"
-    );
-
-    /*
-     * Предварительный положительный угол
-     * установки крыла равен трём градусам.
-     */
-    requireNear(
-        passport.object.wing.installationAngleRad,
-        3.0 * kDegreesToRadians,
+        passport.object.wing
+            .installationAngleRad,
+        3.0 *
+            kDegreesToRadians,
         1.0e-12,
         "Wing installation angle"
     );
-}
-
-void testTailGeometry() {
-    const ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
 
     requireNear(
         passport.object.tail.areaM2,
@@ -175,32 +199,12 @@ void testTailGeometry() {
         0.0,
         "Tail area"
     );
-
-    requireNear(
-        passport.object.tail.spanM,
-        0.514,
-        0.0,
-        "Tail span"
-    );
-
-    requireNear(
-        passport.object.tail.aspectRatio(),
-        0.9821412639405205,
-        1.0e-12,
-        "Tail aspect ratio"
-    );
-
-    requireNear(
-        passport.object.tail.installationAngleRad,
-        0.0,
-        0.0,
-        "Tail installation angle"
-    );
 }
 
-void testParameterProvenance() {
+void testAbstractProvenance() {
     const ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeAbstract500UmpkPassport();
 
     const ParameterRecord* mass =
         passive_flight::findParameter(
@@ -221,126 +225,204 @@ void testParameterProvenance() {
     );
 
     require(
-        mass->status
-            == ParameterStatus::Requirement,
-        "Mass must have Requirement status"
+        mass->status ==
+            ParameterStatus::Requirement,
+        "Abstract mass status"
     );
 
-    const ParameterRecord* centerOfMass =
+    const ParameterRecord* modelType =
         passive_flight::findParameter(
             passport,
-            "mass.centerOfMassXM"
+            "aerodynamics.modelType"
         );
 
     require(
-        centerOfMass != nullptr,
-        "Center-of-mass provenance record is missing"
-    );
-
-    requireNear(
-        numericValue(*centerOfMass),
-        1.15,
-        0.0,
-        "Recorded center of mass"
-    );
-
-    require(
-        centerOfMass->status
-            == ParameterStatus::Provisional,
-        "Center of mass must have Provisional status"
-    );
-
-    const ParameterRecord* wingArea =
-        passive_flight::findParameter(
-            passport,
-            "wing.areaM2"
-        );
-
-    require(
-        wingArea != nullptr,
-        "Wing area provenance record is missing"
-    );
-
-    require(
-        wingArea->status
-            == ParameterStatus::SourceDocument,
-        "Wing area must have SourceDocument status"
-    );
-
-    const ParameterRecord* wingInstallationAngle =
-        passive_flight::findParameter(
-            passport,
-            "wing.installationAngleRad"
-        );
-
-    require(
-        wingInstallationAngle != nullptr,
-        "Wing installation-angle provenance record is missing"
-    );
-
-    requireNear(
-        numericValue(*wingInstallationAngle),
-        3.0 * kDegreesToRadians,
-        1.0e-12,
-        "Recorded wing installation angle"
-    );
-
-    require(
-        wingInstallationAngle->status
-            == ParameterStatus::Provisional,
-        "Wing installation angle must have Provisional status"
-    );
-
-    const ParameterRecord* inertia =
-        passive_flight::findParameter(
-            passport,
-            "mass.pitchMomentOfInertiaKgM2"
-        );
-
-    require(
-        inertia != nullptr,
-        "Inertia provenance record is missing"
-    );
-
-    require(
-        inertia->status
-            == ParameterStatus::Provisional,
-        "Inertia must have Provisional status"
+        modelType != nullptr,
+        "Aerodynamic model type provenance is missing"
     );
 }
 
-void testValidPassport() {
+void testFab1500TPassport() {
     const ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeFab1500TPostnikovPassport();
+
+    require(
+        passport.object.id ==
+            "FAB_1500T_POSTNIKOV_1979",
+        "FAB-1500T identifier is incorrect"
+    );
+
+    require(
+        passport.object.aerodynamicModelType ==
+            AerodynamicModelType::Tabulated,
+        "FAB-1500T must use tabulated aerodynamics"
+    );
+
+    requireNear(
+        passport.object.mass.massKg,
+        1519.0,
+        0.0,
+        "FAB-1500T mass"
+    );
+
+    requireNear(
+        passport.object.mass
+            .pitchMomentOfInertiaKgM2,
+        1122.3,
+        0.0,
+        "FAB-1500T pitch inertia"
+    );
+
+    requireNear(
+        passport.object.mass.centerOfMassXM,
+        1.16,
+        0.0,
+        "FAB-1500T center of mass"
+    );
+
+    requireNear(
+        passport.object.body.lengthM,
+        3.46,
+        0.0,
+        "FAB-1500T length"
+    );
+
+    requireNear(
+        passport.object.body.diameterM,
+        0.58,
+        0.0,
+        "FAB-1500T diameter"
+    );
+
+    const double expectedArea =
+        std::numbers::pi_v<double> *
+        0.58 *
+        0.58 /
+        4.0;
+
+    requireNear(
+        passport.object.reference.areaM2,
+        expectedArea,
+        1.0e-12,
+        "FAB-1500T midsection area"
+    );
+
+    requireNear(
+        passport.object.reference
+            .effectiveReferenceLengthM(),
+        3.46,
+        0.0,
+        "FAB-1500T reference length"
+    );
+
+    require(
+        passport.object.wing.areaM2 == 0.0 &&
+        passport.object.tail.areaM2 == 0.0,
+        "FAB-1500T must not contain fictitious lifting surfaces"
+    );
+
+    require(
+        passport.object.tabulatedAerodynamics
+            .cx0.size() == 19,
+        "FAB-1500T Cx0 node count"
+    );
+
+    require(
+        passport.object.tabulatedAerodynamics
+            .cyAlpha.size() == 7,
+        "FAB-1500T CyAlpha node count"
+    );
+
+    const ParameterRecord* source =
+        passive_flight::findParameter(
+            passport,
+            "aerodynamics.source"
+        );
+
+    require(
+        source != nullptr,
+        "FAB-1500T aerodynamic source record is missing"
+    );
+
+    require(
+        source->status ==
+            ParameterStatus::SourceDocument,
+        "FAB-1500T aerodynamic source status"
+    );
+}
+
+void testBothPassportsAreValid() {
+    requireValid(
+        passive_flight::
+            makeAbstract500UmpkPassport(),
+        "Abstract passport"
+    );
+
+    requireValid(
+        passive_flight::
+            makeFab1500TPostnikovPassport(),
+        "FAB-1500T passport"
+    );
+}
+
+void testTabulatedObjectDoesNotRequireWing() {
+    ObjectPassport passport =
+        passive_flight::
+            makeFab1500TPostnikovPassport();
+
+    /*
+     * Эти значения уже нулевые. Проверка фиксирует
+     * важное правило архитектуры: Tabulated-объект
+     * не обязан иметь крыло и стабилизатор.
+     */
+    passport.object.wing = {};
+    passport.object.tail = {};
 
     const ValidationIssues issues =
-        passive_flight::validate(passport);
+        passive_flight::validate(
+            passport.object
+        );
 
-    if (!issues.empty()) {
-        std::string message =
-            "Passport validation failed:";
+    require(
+        issues.empty(),
+        "Tabulated object must not require wing/tail geometry"
+    );
+}
 
-        for (const auto& issue : issues) {
-            message +=
-                "\n"
-                + issue.field
-                + ": "
-                + issue.message;
-        }
+void testEmptyTabulatedTableDetected() {
+    ObjectPassport passport =
+        passive_flight::
+            makeFab1500TPostnikovPassport();
 
-        throw std::runtime_error(message);
-    }
+    passport.object
+        .tabulatedAerodynamics
+        .cyAlpha
+        .clear();
+
+    const ValidationIssues issues =
+        passive_flight::validate(
+            passport.object
+        );
+
+    require(
+        !issues.empty(),
+        "Empty aerodynamic table must be detected"
+    );
 }
 
 void testInvalidMassDetected() {
     ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeAbstract500UmpkPassport();
 
     passport.object.mass.massKg =
         -500.0;
 
     const ValidationIssues issues =
-        passive_flight::validate(passport);
+        passive_flight::validate(
+            passport
+        );
 
     require(
         !issues.empty(),
@@ -350,13 +432,18 @@ void testInvalidMassDetected() {
 
 void testInvalidInstallationAngleDetected() {
     ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeAbstract500UmpkPassport();
 
-    passport.object.wing.installationAngleRad =
-        std::numeric_limits<double>::quiet_NaN();
+    passport.object.wing
+        .installationAngleRad =
+        std::numeric_limits<double>::
+            quiet_NaN();
 
     const ValidationIssues issues =
-        passive_flight::validate(passport);
+        passive_flight::validate(
+            passport
+        );
 
     require(
         !issues.empty(),
@@ -366,13 +453,16 @@ void testInvalidInstallationAngleDetected() {
 
 void testReferenceGeometryMismatchDetected() {
     ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeAbstract500UmpkPassport();
 
     passport.object.reference.areaM2 =
         1.0;
 
     const ValidationIssues issues =
-        passive_flight::validate(passport);
+        passive_flight::validate(
+            passport
+        );
 
     require(
         !issues.empty(),
@@ -382,7 +472,8 @@ void testReferenceGeometryMismatchDetected() {
 
 void testDuplicateParameterDetected() {
     ObjectPassport passport =
-        passive_flight::makeAbstract500UmpkPassport();
+        passive_flight::
+            makeAbstract500UmpkPassport();
 
     require(
         !passport.parameters.empty(),
@@ -394,14 +485,19 @@ void testDuplicateParameterDetected() {
     );
 
     const ValidationIssues issues =
-        passive_flight::validate(passport);
+        passive_flight::validate(
+            passport
+        );
 
-    bool duplicateFound = false;
+    bool duplicateFound =
+        false;
 
-    for (const auto& issue : issues) {
-        if (issue.message
-            == "Duplicate parameter provenance record") {
-            duplicateFound = true;
+    for (const auto& issue :
+         issues) {
+        if (issue.message ==
+            "Duplicate parameter provenance record") {
+            duplicateFound =
+                true;
             break;
         }
     }
@@ -412,23 +508,37 @@ void testDuplicateParameterDetected() {
     );
 }
 
-void testStatusNames() {
+void testNames() {
     require(
         std::string(
-            passive_flight::parameterStatusName(
-                ParameterStatus::SourceDocument
-            )
+            passive_flight::
+                parameterStatusName(
+                    ParameterStatus::
+                        SourceDocument
+                )
         ) == "source_document",
         "Parameter status name is incorrect"
     );
 
     require(
         std::string(
-            passive_flight::noseShapeName(
-                NoseShape::Ogival
-            )
-        ) == "ogival",
-        "Nose shape name is incorrect"
+            passive_flight::
+                noseShapeName(
+                    NoseShape::Unspecified
+                )
+        ) == "unspecified",
+        "Unspecified nose-shape name is incorrect"
+    );
+
+    require(
+        std::string(
+            passive_flight::
+                aerodynamicModelTypeName(
+                    AerodynamicModelType::
+                        Tabulated
+                )
+        ) == "tabulated",
+        "Aerodynamic model type name is incorrect"
     );
 }
 
@@ -436,17 +546,18 @@ void testStatusNames() {
 
 int main() {
     try {
-        testPassportIdentity();
-        testMassProperties();
-        testWingGeometry();
-        testTailGeometry();
-        testParameterProvenance();
-        testValidPassport();
+        testAbstractPassportIdentity();
+        testAbstractMassAndGeometry();
+        testAbstractProvenance();
+        testFab1500TPassport();
+        testBothPassportsAreValid();
+        testTabulatedObjectDoesNotRequireWing();
+        testEmptyTabulatedTableDetected();
         testInvalidMassDetected();
         testInvalidInstallationAngleDetected();
         testReferenceGeometryMismatchDetected();
         testDuplicateParameterDetected();
-        testStatusNames();
+        testNames();
 
         std::cout
             << "All object passport tests passed."

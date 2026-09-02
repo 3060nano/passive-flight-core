@@ -13,37 +13,15 @@ namespace passive_flight {
  * Статус исходного параметра.
  */
 enum class ParameterStatus {
-    /*
-     * Значение задано постановкой задачи.
-     */
     Requirement,
-
-    /*
-     * Значение взято из приложенного документа.
-     */
     SourceDocument,
-
-    /*
-     * Значение вычислено по другим исходным данным.
-     */
     Derived,
-
-    /*
-     * Значение временно принято для запуска модели.
-     */
     Provisional,
-
-    /*
-     * Значение взято из вспомогательной таблицы
-     * или сторонней модели.
-     */
     AuxiliaryTable
 };
 
 /*
  * Параметр может быть числом или текстовым значением.
- *
- * Текстовый вариант необходим, например, для формы носа.
  */
 using ParameterValue = std::variant<double, std::string>;
 
@@ -51,35 +29,11 @@ using ParameterValue = std::variant<double, std::string>;
  * Описание происхождения одного параметра.
  */
 struct ParameterRecord {
-    /*
-     * Стабильный путь параметра, например:
-     *
-     *     mass.massKg
-     *     wing.areaM2
-     *     body.noseShape
-     */
     std::string path;
-
     ParameterValue value;
-
-    /*
-     * Единица измерения.
-     *
-     * Для безразмерных параметров используется "1".
-     * Для текстовых параметров используется "-".
-     */
     std::string unit;
-
     ParameterStatus status{ParameterStatus::Provisional};
-
-    /*
-     * Краткий идентификатор источника.
-     */
     std::string source;
-
-    /*
-     * Пояснение к значению или допущению.
-     */
     std::string note;
 };
 
@@ -87,7 +41,8 @@ struct ParameterRecord {
  * Полный паспорт объекта.
  *
  * object содержит числовую модель для решателя.
- * parameters содержит происхождение каждого значения.
+ * parameters содержит происхождение основных
+ * паспортных величин и аэродинамического набора.
  */
 struct ObjectPassport {
     ObjectModel object;
@@ -95,46 +50,61 @@ struct ObjectPassport {
 };
 
 /*
- * Создаёт паспорт первого абстрактного объекта.
+ * Создаёт паспорт абстрактного крылатого объекта.
  */
-[[nodiscard]] ObjectPassport makeAbstract500UmpkPassport();
+[[nodiscard]]
+ObjectPassport makeAbstract500UmpkPassport();
+
+/*
+ * Создаёт полный контрольный паспорт ФАБ-1500Т
+ * с готовыми табличными аэродинамическими
+ * характеристиками.
+ */
+[[nodiscard]]
+ObjectPassport makeFab1500TPostnikovPassport();
 
 /*
  * Ищет параметр по стабильному пути.
- *
- * Возвращает nullptr, если параметр отсутствует.
  */
-[[nodiscard]] const ParameterRecord* findParameter(
+[[nodiscard]]
+const ParameterRecord* findParameter(
     const ObjectPassport& passport,
     const std::string& path
 ) noexcept;
 
 /*
  * Проверяет числовую модель объекта.
+ *
+ * Набор обязательных полей зависит от
+ * aerodynamicModelType.
  */
-[[nodiscard]] ValidationIssues validate(
+[[nodiscard]]
+ValidationIssues validate(
     const ObjectModel& object
 );
 
 /*
- * Проверяет паспорт вместе с происхождением параметров.
+ * Проверяет паспорт вместе с происхождением
+ * основных параметров.
  */
-[[nodiscard]] ValidationIssues validate(
+[[nodiscard]]
+ValidationIssues validate(
     const ObjectPassport& passport
 );
 
-/*
- * Возвращает текстовое название статуса.
- */
-[[nodiscard]] const char* parameterStatusName(
+[[nodiscard]]
+const char* parameterStatusName(
     ParameterStatus status
 ) noexcept;
 
-/*
- * Возвращает текстовое название формы носа.
- */
-[[nodiscard]] const char* noseShapeName(
+[[nodiscard]]
+const char* noseShapeName(
     NoseShape shape
+) noexcept;
+
+[[nodiscard]]
+const char* aerodynamicModelTypeName(
+    AerodynamicModelType type
 ) noexcept;
 
 } // namespace passive_flight
