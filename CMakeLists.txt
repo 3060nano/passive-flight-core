@@ -22,6 +22,7 @@ add_library(
         src/StandardAtmosphere.cpp
         src/Aerodynamics.cpp
         src/TabulatedAerodynamicModel.cpp
+        src/KnownObjects.cpp
         src/ObjectAerodynamicsAdapter.cpp
         src/NominalLongitudinalDynamics.cpp
         src/PerturbedLongitudinalDynamics.cpp
@@ -414,6 +415,12 @@ if (BUILD_TESTING)
             test_tabulated_aerodynamic_model
             tests/test_tabulated_aerodynamic_model.cpp
             tabulated_aerodynamic_model
+    )
+
+    add_core_test(
+            test_fab1500t_model
+            tests/test_fab1500t_model.cpp
+            fab1500t_model
     )
 
     add_core_test(

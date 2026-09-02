@@ -1,17 +1,30 @@
 #pragma once
 
+#include "passive_flight/TabulatedAerodynamicData.hpp"
+
 #include <string>
 
 namespace passive_flight {
 
 /*
- * Форма носовой части.
+ * Способ получения аэродинамических коэффициентов объекта.
  *
- * В первой модели используется оживальная форма.
- * Коническая форма заранее добавлена в перечисление,
- * поскольку в дипломе планируется сравнение разных носовых частей.
+ * PreliminaryGeometryBased — текущая предварительная модель
+ * абстрактного крылатого объекта.
+ *
+ * Tabulated — готовые аэродинамические характеристики
+ * объекта заданы в паспорте в виде таблиц от числа Маха.
+ */
+enum class AerodynamicModelType {
+    PreliminaryGeometryBased,
+    Tabulated
+};
+
+/*
+ * Форма носовой части.
  */
 enum class NoseShape {
+    Unspecified,
     Ogival,
     Conical
 };
@@ -47,24 +60,16 @@ struct MassProperties {
  *     Mz = q * S_ref * L_ref * mz.
  *
  * Для крылатого объекта L_ref обычно равна САХ крыла.
- * Для осесимметричной бомбы L_ref может быть равна длине корпуса.
+ * Для осесимметричной бомбы L_ref может быть равна
+ * полной длине корпуса.
  *
- * Поля spanM и meanAerodynamicChordM пока сохранены для
- * совместимости с существующей геометрической аэродинамикой
- * и диагностикой числа Рейнольдса.
+ * Поля spanM и meanAerodynamicChordM пока сохранены
+ * для существующей геометрической аэродинамики.
  */
 struct ReferenceGeometry {
     double areaM2{};
     double spanM{};
     double meanAerodynamicChordM{};
-
-    /*
-     * Универсальная характерная длина для коэффициента момента.
-     *
-     * Если значение не задано (> 0), временно используется
-     * meanAerodynamicChordM. Это сохраняет поведение текущего
-     * ABSTRACT_500_UMPK_V1 без изменения его паспорта.
-     */
     double referenceLengthM{};
 
     [[nodiscard]]
@@ -93,6 +98,10 @@ struct WingGeometry {
     double aerodynamicCenterXM{};
 
     [[nodiscard]] double aspectRatio() const noexcept {
+        if (areaM2 <= 0.0) {
+            return 0.0;
+        }
+
         return spanM * spanM / areaM2;
     }
 };
@@ -114,12 +123,19 @@ struct TailGeometry {
     double aerodynamicCenterXM{};
 
     [[nodiscard]] double aspectRatio() const noexcept {
+        if (areaM2 <= 0.0) {
+            return 0.0;
+        }
+
         return spanM * spanM / areaM2;
     }
 };
 
 /*
  * Геометрия корпуса.
+ *
+ * Для табличной модели не все геометрические поля
+ * обязаны участвовать в расчёте аэродинамики.
  */
 struct BodyGeometry {
     double lengthM{};
@@ -128,14 +144,11 @@ struct BodyGeometry {
     double noseLengthM{};
     double tailLengthM{};
 
-    NoseShape noseShape{NoseShape::Ogival};
+    NoseShape noseShape{NoseShape::Unspecified};
 
     /*
-     * Временный коэффициент сопротивления корпуса,
-     * отнесённый к площади миделя.
-     *
-     * В дальнейшем он будет заменён табличной
-     * зависимостью от числа Маха и формы носа.
+     * Поле используется только текущей
+     * PreliminaryGeometryBased-моделью.
      */
     double zeroLiftDragCoefficientOnFrontalArea{};
 };
@@ -143,9 +156,9 @@ struct BodyGeometry {
 /*
  * Числовая модель пассивного объекта.
  *
- * Здесь находятся только данные, необходимые решателю.
- * Информация о происхождении параметров хранится отдельно
- * в ObjectPassport.
+ * Для варианта с готовыми аэродинамическими
+ * характеристиками tabulatedAerodynamics является
+ * частью полного паспорта объекта.
  */
 struct ObjectModel {
     std::string id;
@@ -157,6 +170,12 @@ struct ObjectModel {
     WingGeometry wing;
     TailGeometry tail;
     BodyGeometry body;
+
+    AerodynamicModelType aerodynamicModelType{
+        AerodynamicModelType::PreliminaryGeometryBased
+    };
+
+    TabulatedAerodynamicData tabulatedAerodynamics;
 };
 
 } // namespace passive_flight

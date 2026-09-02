@@ -1,5 +1,7 @@
 #include "passive_flight/ObjectAerodynamicsAdapter.hpp"
 
+#include "passive_flight/TabulatedAerodynamicModel.hpp"
+
 #include <memory>
 #include <stdexcept>
 
@@ -24,18 +26,20 @@ double noseNormalForceFactor(
 
         case NoseShape::Conical:
             return 1.05;
+
+        case NoseShape::Unspecified:
+            break;
     }
 
     throw std::invalid_argument(
-        "Unsupported nose shape"
+        "Nose shape is not available for "
+        "preliminary geometry-based aerodynamics"
     );
 }
 
 /**
  * Приближённое положение аэродинамического центра
  * нормальной силы корпуса.
- *
- * Координата отсчитывается от носа объекта.
  */
 double bodyAerodynamicCenterXM(
     const BodyGeometry& body
@@ -50,10 +54,14 @@ double bodyAerodynamicCenterXM(
             return
                 0.30 *
                 body.lengthM;
+
+        case NoseShape::Unspecified:
+            break;
     }
 
     throw std::invalid_argument(
-        "Unsupported nose shape"
+        "Nose shape is not available for "
+        "preliminary geometry-based aerodynamics"
     );
 }
 
@@ -117,14 +125,16 @@ AerodynamicGeometry
 makeAerodynamicGeometry(
     const ObjectModel& object
 ) {
+    if (object.aerodynamicModelType !=
+        AerodynamicModelType::PreliminaryGeometryBased) {
+        throw std::invalid_argument(
+            "AerodynamicGeometry is only available "
+            "for PreliminaryGeometryBased objects"
+        );
+    }
+
     AerodynamicGeometry result;
 
-    /*
-     * Характерные размеры всего объекта.
-     *
-     * PreliminaryAerodynamicModel пока по-прежнему
-     * использует САХ крыла как свою характерную длину.
-     */
     result.referenceAreaM2 =
         object.reference.areaM2;
 
@@ -132,9 +142,6 @@ makeAerodynamicGeometry(
         object.reference
             .meanAerodynamicChordM;
 
-    /*
-     * Параметры корпуса.
-     */
     result.bodyDiameterM =
         object.body.diameterM;
 
@@ -151,10 +158,6 @@ makeAerodynamicGeometry(
             object.body.noseShape
         );
 
-    /*
-     * Параметры крыла и стабилизатора
-     * берутся непосредственно из паспорта.
-     */
     result.wing =
         makeWingAerodynamics(
             object.wing
@@ -165,10 +168,6 @@ makeAerodynamicGeometry(
             object.tail
         );
 
-    /*
-     * Резервное дозвуковое значение производной
-     * среднего угла скоса потока.
-     */
     result.downwashGradient =
         0.57;
 
@@ -179,24 +178,34 @@ std::shared_ptr<const AerodynamicModel>
 makeAerodynamicModel(
     const ObjectModel& object
 ) {
-    /*
-     * На первом этапе существующий объект продолжает
-     * использовать старую PreliminaryAerodynamicModel.
-     *
-     * На следующем шаге здесь появится выбор между
-     * Preliminary/GeometryBased и Tabulated по паспорту.
-     */
-    return
-        std::make_shared<
-            PreliminaryAerodynamicModel
-        >(
-            makeAerodynamicGeometry(
-                object
-            ),
-            makeAbstract500ZeroLiftDragTable(),
-            makeAbstract500DownwashGradientTable(),
-            makeAbstract500PitchMomentAlphaDotDerivativeTable()
-        );
+    switch (object.aerodynamicModelType) {
+        case AerodynamicModelType::PreliminaryGeometryBased:
+            return
+                std::make_shared<
+                    PreliminaryAerodynamicModel
+                >(
+                    makeAerodynamicGeometry(
+                        object
+                    ),
+                    makeAbstract500ZeroLiftDragTable(),
+                    makeAbstract500DownwashGradientTable(),
+                    makeAbstract500PitchMomentAlphaDotDerivativeTable()
+                );
+
+        case AerodynamicModelType::Tabulated:
+            return
+                std::make_shared<
+                    TabulatedAerodynamicModel
+                >(
+                    object.reference
+                        .effectiveReferenceLengthM(),
+                    object.tabulatedAerodynamics
+                );
+    }
+
+    throw std::invalid_argument(
+        "Unsupported aerodynamic model type"
+    );
 }
 
 } // namespace passive_flight
