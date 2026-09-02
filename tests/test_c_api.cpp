@@ -141,6 +141,21 @@ PFSimulationInput makeInput() {
     return input;
 }
 
+PFSimulationInput makeFab1500TInput() {
+    PFSimulationInput input{};
+
+    input.objectId =
+        "FAB_1500T_POSTNIKOV_1979";
+
+    input.releaseAltitudeM =
+        100.0;
+
+    input.releaseSpeedMps =
+        200.0;
+
+    return input;
+}
+
 void testApiVersion() {
     const char* version =
         pfGetApiVersion();
@@ -179,19 +194,30 @@ void testResultCodeNames() {
 
 void testObjectList() {
     require(
-        pfGetObjectCount() == 1,
-        "C API must expose one object"
+        pfGetObjectCount() == 2,
+        "C API must expose two objects"
     );
 
     require(
         getObjectId(0) ==
             "ABSTRACT_500_UMPK_V1",
-        "C API object ID is incorrect"
+        "First C API object ID is incorrect"
     );
 
     require(
         !getObjectDisplayName(0).empty(),
-        "C API object name is empty"
+        "First C API object name is empty"
+    );
+
+    require(
+        getObjectId(1) ==
+            "FAB_1500T_POSTNIKOV_1979",
+        "Second C API object ID is incorrect"
+    );
+
+    require(
+        !getObjectDisplayName(1).empty(),
+        "Second C API object name is empty"
     );
 
     uint64_t requiredSize = 0;
@@ -252,6 +278,59 @@ void testSummaryCalculation() {
     require(
         output.impactFlightPathAngleRad < 0.0,
         "Impact trajectory must point downward"
+    );
+}
+
+void testFab1500TSummaryCalculation() {
+    const PFSimulationInput input =
+        makeFab1500TInput();
+
+    PFSimulationOutput output{};
+
+    const int32_t result =
+        pfCalculate(
+            &input,
+            &output
+        );
+
+    require(
+        result == PF_RESULT_OK,
+        "FAB-1500T summary calculation failed"
+    );
+
+    require(
+        output.terminationReason ==
+            PF_TERMINATION_GROUND_REACHED,
+        "FAB-1500T simulation did not reach ground"
+    );
+
+    /*
+     * Эти интервалы являются sanity-check,
+     * а не сравнением с баллистической таблицей.
+     * Они фиксируют согласованность публичного
+     * C API с уже проверенным расчётом ядра.
+     */
+    require(
+        output.downrangeM > 800.0 &&
+        output.downrangeM < 1000.0,
+        "FAB-1500T downrange is outside sanity range"
+    );
+
+    require(
+        output.fallTimeS > 4.0 &&
+        output.fallTimeS < 5.0,
+        "FAB-1500T fall time is outside sanity range"
+    );
+
+    require(
+        output.impactSpeedMps > 180.0 &&
+        output.impactSpeedMps < 220.0,
+        "FAB-1500T impact speed is outside sanity range"
+    );
+
+    require(
+        output.impactFlightPathAngleRad < 0.0,
+        "FAB-1500T impact trajectory must point downward"
     );
 }
 
@@ -403,6 +482,93 @@ void testTrajectoryCalculation() {
     );
 }
 
+void testFab1500TTrajectoryCalculation() {
+    const PFSimulationInput input =
+        makeFab1500TInput();
+
+    PFSimulationOutput output{};
+
+    uint64_t requiredPointCount = 0;
+    uint64_t writtenPointCount = 0;
+
+    const int32_t queryResult =
+        pfCalculateTrajectory(
+            &input,
+            &output,
+            nullptr,
+            0,
+            &requiredPointCount,
+            &writtenPointCount
+        );
+
+    require(
+        queryResult ==
+            PF_RESULT_BUFFER_TOO_SMALL,
+        "FAB-1500T trajectory size query failed"
+    );
+
+    require(
+        requiredPointCount > 1,
+        "FAB-1500T trajectory must contain several points"
+    );
+
+    std::vector<PFTrajectoryPoint> points(
+        static_cast<std::size_t>(
+            requiredPointCount
+        )
+    );
+
+    const int32_t calculationResult =
+        pfCalculateTrajectory(
+            &input,
+            &output,
+            points.data(),
+            requiredPointCount,
+            &requiredPointCount,
+            &writtenPointCount
+        );
+
+    require(
+        calculationResult ==
+            PF_RESULT_OK,
+        "FAB-1500T trajectory calculation failed"
+    );
+
+    require(
+        writtenPointCount ==
+            requiredPointCount,
+        "Incorrect FAB-1500T trajectory point count"
+    );
+
+    requireNear(
+        points.front().timeS,
+        0.0,
+        1.0e-12,
+        "FAB-1500T trajectory must start at t=0"
+    );
+
+    requireNear(
+        points.front().altitudeM,
+        input.releaseAltitudeM,
+        1.0e-12,
+        "FAB-1500T initial altitude is incorrect"
+    );
+
+    requireNear(
+        points.back().altitudeM,
+        0.0,
+        1.0e-12,
+        "FAB-1500T trajectory must end at ground"
+    );
+
+    requireNear(
+        points.back().downrangeM,
+        output.downrangeM,
+        1.0e-12,
+        "FAB-1500T final trajectory range differs from summary"
+    );
+}
+
 void testSimInTechSummaryAdapter() {
     const PFSimulationInput input =
         makeInput();
@@ -497,6 +663,102 @@ void testSimInTechSummaryAdapter() {
         terminationReason ==
             referenceOutput.terminationReason,
         "SimInTech termination reason differs"
+    );
+}
+
+void testFab1500TSimInTechSummaryAdapter() {
+    const PFSimulationInput input =
+        makeFab1500TInput();
+
+    PFSimulationOutput referenceOutput{};
+
+    const int32_t referenceResult =
+        pfCalculate(
+            &input,
+            &referenceOutput
+        );
+
+    require(
+        referenceResult == PF_RESULT_OK,
+        "FAB-1500T reference calculation failed"
+    );
+
+    double downrangeM = 0.0;
+    double fallTimeS = 0.0;
+    double impactSpeedMps = 0.0;
+    double impactFlightPathAngleRad = 0.0;
+    double impactPitchAngleRad = 0.0;
+    double impactAngleOfAttackRad = 0.0;
+
+    int32_t terminationReason =
+        PF_TERMINATION_INVALID_STATE;
+
+    const int32_t adapterResult =
+        pfSimInTechCalculate(
+            input.objectId,
+            input.releaseAltitudeM,
+            input.releaseSpeedMps,
+            &downrangeM,
+            &fallTimeS,
+            &impactSpeedMps,
+            &impactFlightPathAngleRad,
+            &impactPitchAngleRad,
+            &impactAngleOfAttackRad,
+            &terminationReason
+        );
+
+    require(
+        adapterResult == PF_RESULT_OK,
+        "FAB-1500T SimInTech summary calculation failed"
+    );
+
+    requireNear(
+        downrangeM,
+        referenceOutput.downrangeM,
+        1.0e-12,
+        "FAB-1500T SimInTech downrange differs"
+    );
+
+    requireNear(
+        fallTimeS,
+        referenceOutput.fallTimeS,
+        1.0e-12,
+        "FAB-1500T SimInTech fall time differs"
+    );
+
+    requireNear(
+        impactSpeedMps,
+        referenceOutput.impactSpeedMps,
+        1.0e-12,
+        "FAB-1500T SimInTech impact speed differs"
+    );
+
+    requireNear(
+        impactFlightPathAngleRad,
+        referenceOutput
+            .impactFlightPathAngleRad,
+        1.0e-12,
+        "FAB-1500T SimInTech trajectory angle differs"
+    );
+
+    requireNear(
+        impactPitchAngleRad,
+        referenceOutput.impactPitchAngleRad,
+        1.0e-12,
+        "FAB-1500T SimInTech pitch angle differs"
+    );
+
+    requireNear(
+        impactAngleOfAttackRad,
+        referenceOutput.impactAngleOfAttackRad,
+        1.0e-12,
+        "FAB-1500T SimInTech angle of attack differs"
+    );
+
+    require(
+        terminationReason ==
+            referenceOutput.terminationReason,
+        "FAB-1500T SimInTech termination reason differs"
     );
 }
 
@@ -760,12 +1022,17 @@ int main() {
         testObjectList();
 
         testSummaryCalculation();
+        testFab1500TSummaryCalculation();
         testUnknownObject();
         testInvalidInput();
+
         testTrajectoryCalculation();
+        testFab1500TTrajectoryCalculation();
 
         testSimInTechSummaryAdapter();
+        testFab1500TSimInTechSummaryAdapter();
         testSimInTechSummaryValidation();
+
         testSimInTechTrajectoryAdapter();
         testSimInTechTrajectoryValidation();
 
